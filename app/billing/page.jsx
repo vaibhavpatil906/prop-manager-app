@@ -22,11 +22,11 @@ function InvoiceModal({ data, onClose }) {
   
   const msg = `Hi ${data.tenantName}, your bill for ${displayMonth} is generated.\n\n` +
               `Business: ${profile?.business_name || 'PropManager'}\n` +
-              `Fixed Rent: $${parseFloat(data.fixed_rent).toLocaleString()}\n` +
-              `Light Bill: $${(energyUnits * data.rate_per_unit).toLocaleString()} (${energyUnits} units)\n` +
-              `Water Bill: $${parseFloat(data.water_bill || 0).toLocaleString()}\n` +
-              `Other: $${parseFloat(data.other_utilities || 0).toLocaleString()}\n\n` +
-              `*Total Due: $${parseFloat(data.total_amount || data.total).toLocaleString()}*\n` +
+              `Fixed Rent: ₹${parseFloat(data.fixed_rent).toLocaleString()}\n` +
+              `Light Bill: ₹${(energyUnits * data.rate_per_unit).toLocaleString()} (${energyUnits} units)\n` +
+              `Water Bill: ₹${parseFloat(data.water_bill || 0).toLocaleString()}\n` +
+              `Other: ₹${parseFloat(data.other_utilities || 0).toLocaleString()}\n\n` +
+              `*Total Due: ₹${parseFloat(data.total_amount || data.total).toLocaleString()}*\n` +
               `Due Date: ${new Date(data.due_date).toLocaleDateString()}\n\nPlease pay at your earliest. Thank you!`
 
   const sendWhatsApp = () => {
@@ -42,7 +42,7 @@ function InvoiceModal({ data, onClose }) {
 
   return (
     <div className="no-print" style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 500, overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
+      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
         <div id="printable-invoice" style={{ padding: 24, background: '#fff', color: '#000' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, borderBottom: '1px solid #f1f5f9', paddingBottom: 16 }}>
             <div style={{ flex: 1 }}>
@@ -71,14 +71,14 @@ function InvoiceModal({ data, onClose }) {
             ].map(([label, val]) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}>
                 <div style={{ fontWeight: 800, color: '#000' }}>{label}</div>
-                <div style={{ fontWeight: 950, color: '#000' }}>${val.toLocaleString()}</div>
+                <div style={{ fontWeight: 950, color: '#000' }}>₹{val.toLocaleString()}</div>
               </div>
             ))}
           </div>
 
           <div style={{ background: '#000', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff' }}>
             <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.9 }}>Total Due</div>
-            <div style={{ fontSize: 20, fontWeight: 950 }}>${parseFloat(data.total_amount || data.total).toLocaleString()}</div>
+            <div style={{ fontSize: 20, fontWeight: 950 }}>₹{parseFloat(data.total_amount || data.total).toLocaleString()}</div>
           </div>
         </div>
 
@@ -105,7 +105,7 @@ function HistoryAccordion({ month, items, onEdit, onInvoice, onDelete, onPay }) 
         style={{ padding: '16px 20px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
         <div>
           <span style={{ fontWeight: 950, color: '#000', fontSize: 14 }}>{displayMonth}</span>
-          <span style={{ marginLeft: 12, fontSize: 12, color: '#6366f1', fontWeight: 900 }}>${totalMonth.toLocaleString()}</span>
+          <span style={{ marginLeft: 12, fontSize: 12, color: '#6366f1', fontWeight: 900 }}>₹{totalMonth.toLocaleString()}</span>
         </div>
         <span style={{ fontSize: 12, color: '#000', transform: open ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>▼</span>
       </div>
@@ -116,7 +116,7 @@ function HistoryAccordion({ month, items, onEdit, onInvoice, onDelete, onPay }) 
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 900, fontSize: 14, color: '#000' }}>{h.tenant?.name}</div>
                 <div style={{ fontSize: 11, color: '#000', marginTop: 4, fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center' }}>
-                  ${h.total_amount.toLocaleString()}
+                  ₹{h.total_amount.toLocaleString()}
                   <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontWeight: 950, background: h.payment_status === 'Paid' ? '#ecfdf5' : '#fff7ed', color: h.payment_status === 'Paid' ? '#059669' : '#d97706' }}>{h.payment_status.toUpperCase()}</span>
                 </div>
               </div>
@@ -345,11 +345,11 @@ export default function Billing() {
                             <div style={{ fontWeight: 900, fontSize: 14, color: '#000' }}>{h.tenant?.name}</div>
                             <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 700 }}>Unit {h.tenant?.unit?.unit_number}</div>
                           </td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>${parseFloat(h.fixed_rent).toLocaleString()}</td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>${energyBill.toLocaleString()} <span style={{ fontSize: 10, color: '#94a3b8' }}>({energyUnits}u)</span></td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>${parseFloat(h.water_bill).toLocaleString()}</td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>${parseFloat(h.other_utilities).toLocaleString()}</td>
-                          <td style={{ padding: '14px 20px', fontWeight: 950, color: '#6366f1', fontSize: 15 }}>${h.total_amount.toLocaleString()}</td>
+                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>₹{parseFloat(h.fixed_rent).toLocaleString()}</td>
+                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>₹{energyBill.toLocaleString()} <span style={{ fontSize: 10, color: '#94a3b8' }}>({energyUnits}u)</span></td>
+                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>₹{parseFloat(h.water_bill).toLocaleString()}</td>
+                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>₹{parseFloat(h.other_utilities).toLocaleString()}</td>
+                          <td style={{ padding: '14px 20px', fontWeight: 950, color: '#6366f1', fontSize: 15 }}>₹{h.total_amount.toLocaleString()}</td>
                         </tr>
                       )
                     })}
@@ -358,16 +358,16 @@ export default function Billing() {
                     <tfoot style={{ background: '#f8fafc' }}>
                       <tr>
                         <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>TOTALS</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>${history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.fixed_rent), 0).toLocaleString()}</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>${history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => {
+                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.fixed_rent), 0).toLocaleString()}</td>
+                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => {
                           const u = x.curr_reading - x.prev_reading; 
                           let b = u * x.rate_per_unit; 
                           if (b > 0 && b < 150) b = 150; 
                           return s + b;
                         }, 0).toLocaleString()}</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>${history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.water_bill), 0).toLocaleString()}</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>${history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.other_utilities), 0).toLocaleString()}</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#6366f1', fontSize: 16 }}>${history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.total_amount), 0).toLocaleString()}</td>
+                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.water_bill), 0).toLocaleString()}</td>
+                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.other_utilities), 0).toLocaleString()}</td>
+                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#6366f1', fontSize: 16 }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.total_amount), 0).toLocaleString()}</td>
                       </tr>
                     </tfoot>
                   )}
@@ -390,7 +390,7 @@ export default function Billing() {
                         <td style={{ padding: '12px 16px' }}><div style={{...inputS, background: '#f8fafc', width: 70, border: '1px solid #f1f5f9'}}>{row.prev_reading}</div></td>
                         <td style={{ padding: '12px 16px' }}><input type="number" value={row.curr_reading} onChange={e => handleBulkChange(row.tenant_id, 'curr', e.target.value)} style={{ ...inputS, width: 70, border: !row.curr_reading ? '2px solid #fbbf24' : '1px solid #e2e8f0' }} /></td>
                         <td style={{ padding: '12px 16px' }}><input type="number" value={row.water_bill} onChange={e => handleBulkChange(row.tenant_id, 'water', e.target.value)} style={{...inputS, width: 70}} /></td>
-                        <td style={{ padding: '12px 16px' }}><div style={{ fontSize: 14, fontWeight: 950, color: '#000' }}>${calculateRowTotal(row).toLocaleString()}</div></td>
+                        <td style={{ padding: '12px 16px' }}><div style={{ fontSize: 14, fontWeight: 950, color: '#000' }}>₹{calculateRowTotal(row).toLocaleString()}</div></td>
                         <td style={{ padding: '12px 16px' }}><input type="checkbox" checked={row.mark_paid} onChange={e => handleBulkChange(row.tenant_id, 'mark_paid', e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} /></td>
                         <td style={{ padding: '12px 16px' }}><button onClick={() => generateSingleBill(row)} disabled={saving} style={{ padding: '8px 12px', background: '#000', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Generate</button></td>
                       </tr>
@@ -412,8 +412,8 @@ export default function Billing() {
                   <div><label style={labelS}>Curr Light</label><input type="number" value={form.curr_reading} onChange={e => setForm({...form, curr_reading: e.target.value})} style={inputS} /></div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-                  <div><label style={labelS}>Water ($)</label><input type="number" value={form.water_bill} onChange={e => setForm({...form, water_bill: e.target.value})} style={inputS} /></div>
-                  <div><label style={labelS}>Other ($)</label><input type="number" value={form.other_utilities} onChange={e => setForm({...form, other_utilities: e.target.value})} style={inputS} /></div>
+                  <div><label style={labelS}>Water (₹)</label><input type="number" value={form.water_bill} onChange={e => setForm({...form, water_bill: e.target.value})} style={inputS} /></div>
+                  <div><label style={labelS}>Other (₹)</label><input type="number" value={form.other_utilities} onChange={e => setForm({...form, other_utilities: e.target.value})} style={inputS} /></div>
                 </div>
                 {!editingId && (
                   <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -423,7 +423,7 @@ export default function Billing() {
                 )}
                 <div style={{ background: '#000', borderRadius: 14, padding: 16, marginBottom: 16, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 13, fontWeight: 800 }}>Total Due</span>
-                  <span style={{ fontSize: 18, fontWeight: 950, color: '#818cf8' }}>${calculateRowTotal(form).toLocaleString()}</span>
+                  <span style={{ fontSize: 18, fontWeight: 950, color: '#818cf8' }}>₹{calculateRowTotal(form).toLocaleString()}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => generateSingleBill(form)} disabled={saving || !form.tenant_id} style={{ flex: 2, padding: '14px', background: '#000', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 950, cursor: 'pointer' }}>{editingId ? 'Update Bill' : 'Generate Bill'}</button>

@@ -40,7 +40,7 @@ function Badge({ label }) {
   }
   const s = colors[label] || { bg: '#f8fafc', color: '#1a1a2e', dot: '#1a1a2e' }
   return (
-    <span style={{ background: s.bg, color: s.color, padding: '4px 10px', borderRadius: 20, fontSize: 10, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5, textTransform: 'uppercase' }}>
+    <span style={{ background: s.bg, color: s.color, padding: '4px 12px', borderRadius: 20, fontSize: 10, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5, textTransform: 'uppercase' }}>
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.dot }} />
       {label}
     </span>
@@ -123,8 +123,8 @@ export default function Dashboard() {
                 <StatCard label="Occupancy" value={stats.occupancy + '%'} sub="Capacity" accent="#06b6d4" iconKey="occupancy" />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
-                <StatCard label="Revenue" value={'$' + (stats.revenue / 1000).toFixed(1) + 'k'} sub="Collected" accent="#10b981" iconKey="revenue" />
-                <StatCard label="Outstanding" value={'$' + (stats.outstanding / 1000).toFixed(1) + 'k'} sub="Unpaid" accent="#ef4444" iconKey="outstanding" />
+                <StatCard label="Revenue" value={'₹' + (stats.revenue / 1000).toFixed(1) + 'k'} sub="Collected" accent="#10b981" iconKey="revenue" />
+                <StatCard label="Outstanding" value={'₹' + (stats.outstanding / 1000).toFixed(1) + 'k'} sub="Unpaid" accent="#ef4444" iconKey="outstanding" />
                 <StatCard label="Issues" value={stats.openMaintenance} sub="Open" accent="#f59e0b" iconKey="maintenance" />
               </div>
 
@@ -161,7 +161,7 @@ export default function Dashboard() {
                           <div style={{ fontSize: 11, color: '#000', fontWeight: 700 }}>{p.due_date}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: 950, fontSize: 14, color: '#0f172a' }}>${Number(p.amount).toLocaleString()}</div>
+                          <div style={{ fontWeight: 950, fontSize: 14, color: '#0f172a' }}>₹{Number(p.amount).toLocaleString()}</div>
                           <Badge label={p.status} />
                         </div>
                       </div>

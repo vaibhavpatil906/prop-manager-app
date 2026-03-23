@@ -149,7 +149,7 @@ export default function Tenants() {
     <div style={{ marginBottom: 16 }}>
       <label style={{ fontSize: 11, fontWeight: 950, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>{label}</label>
       <input type={type} value={state[key]} onChange={e => setState({ ...state, [key]: e.target.value })}
-        style={{ width: '100%', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', outline: 'none', color: '#000', fontWeight: 800 }} />
+        style={{ width: '100%', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', outline: 'none', color: '#000', fontWeight: 600 }} />
     </div>
   )
 
@@ -183,7 +183,7 @@ export default function Tenants() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                     <div>
                       <div style={{ fontWeight: 950, color: '#0f172a', fontSize: 16 }}>{t.name}</div>
-                      <div style={{ fontSize: 12, color: '#000', marginTop: 2, fontWeight: 800 }}>{t.email}</div>
+                      <div style={{ fontSize: 12, color: '#000', marginTop: 2, fontWeight: 700 }}>{t.email}</div>
                     </div>
                     <Badge label={t.status} />
                   </div>
@@ -195,7 +195,7 @@ export default function Tenants() {
                     </div>
                     <div>
                       <div style={{ fontSize: 10, fontWeight: 950, color: '#000', textTransform: 'uppercase' }}>Monthly Rent</div>
-                      <div style={{ fontSize: 13, fontWeight: 950, color: '#0f172a', marginTop: 4 }}>${Number(t.rent).toLocaleString()}</div>
+                      <div style={{ fontSize: 13, fontWeight: 950, color: '#0f172a', marginTop: 4 }}>₹{Number(t.rent).toLocaleString()}</div>
                     </div>
                   </div>
 
@@ -219,7 +219,7 @@ export default function Tenants() {
             <div><div style={{fontSize:10, fontWeight: 950, color:'#000'}}>EMAIL</div><div style={{fontWeight:950, color:'#000'}}>{tenantDetailModal.email}</div></div>
             <div><div style={{fontSize:10, fontWeight: 950, color:'#000'}}>PHONE</div><div style={{fontWeight:950, color:'#000'}}>{tenantDetailModal.phone || '—'}</div></div>
             <div><div style={{fontSize:10, fontWeight: 950, color:'#000'}}>UNIT</div><div style={{fontWeight:950, color:'#6366f1'}}>Unit {tenantDetailModal.unit?.unit_number} ({tenantDetailModal.unit?.property?.name})</div></div>
-            <div><div style={{fontSize:10, fontWeight: 950, color:'#000'}}>DEPOSIT</div><div style={{fontWeight:950, color:'#000'}}>${tenantDetailModal.deposit?.toLocaleString()}</div></div>
+            <div><div style={{fontSize:10, fontWeight: 950, color:'#000'}}>DEPOSIT</div><div style={{fontWeight:950, color:'#000'}}>₹{tenantDetailModal.deposit?.toLocaleString()}</div></div>
           </div>
 
           <div style={sectionH}>Utility Billing History</div>
@@ -239,10 +239,10 @@ export default function Tenants() {
                   return (
                     <tr key={b.id} style={{ borderBottom: '1px solid #f8fafc' }}>
                       <td style={{ padding: '12px 8px', fontWeight: 950, color: '#000' }}>{b.billing_month}</td>
-                      <td style={{ padding: '12px 8px', fontWeight: 900, color: '#000' }}>${energyBill.toLocaleString()} <span style={{fontSize:10, color:'#6366f1', fontWeight: 950}}>({energyUnits}u)</span></td>
-                      <td style={{ padding: '12px 8px', fontWeight: 900, color: '#000' }}>${parseFloat(b.water_bill || 0).toLocaleString()}</td>
-                      <td style={{ padding: '12px 8px', fontWeight: 900, color: '#000' }}>${parseFloat(b.fixed_rent || 0).toLocaleString()}</td>
-                      <td style={{ padding: '12px 8px', fontWeight: 950, color:'#6366f1' }}>${b.total_amount.toLocaleString()}</td>
+                      <td style={{ padding: '12px 8px', fontWeight: 900, color: '#000' }}>₹{energyBill.toLocaleString()} <span style={{fontSize:10, color:'#6366f1', fontWeight: 950}}>({energyUnits}u)</span></td>
+                      <td style={{ padding: '12px 8px', fontWeight: 900, color: '#000' }}>₹{parseFloat(b.water_bill || 0).toLocaleString()}</td>
+                      <td style={{ padding: '12px 8px', fontWeight: 900, color: '#000' }}>₹{parseFloat(b.fixed_rent || 0).toLocaleString()}</td>
+                      <td style={{ padding: '12px 8px', fontWeight: 950, color:'#6366f1' }}>₹{b.total_amount.toLocaleString()}</td>
                       <td style={{ padding: '12px 8px' }}>
                         <Badge label={tenantDetailModal.payments.find(p => p.due_date === b.due_date && Math.abs(Number(p.amount) - Number(b.total_amount)) < 1)?.status || 'Pending'} />
                       </td>
@@ -284,8 +284,8 @@ export default function Tenants() {
             </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {inp('Rent ($)', 'rent', form, setForm, 'number')}
-            {inp('Deposit ($)', 'deposit', form, setForm, 'number')}
+            {inp('Rent (₹)', 'rent', form, setForm, 'number')}
+            {inp('Deposit (₹)', 'deposit', form, setForm, 'number')}
           </div>
           <div style={{ marginBottom: 20 }}>
             <label style={{ fontSize: 11, fontWeight: 950, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>LEASE AGREEMENT</label>
@@ -301,8 +301,8 @@ export default function Tenants() {
         <Modal title="Release" onClose={() => setReleaseModal(null)}>
           <p style={{ fontSize: 14, color: '#000', lineHeight: 1.5, marginBottom: 20, fontWeight: 800 }}>Setting <b>{releaseModal.name}</b> to Inactive and marking Unit <b>{releaseModal.unit?.unit_number}</b> as Vacant.</p>
           <div style={{ background: '#f8fafc', borderRadius: 16, padding: 20, marginBottom: 20, border: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#000', fontWeight: 950 }}><span>Initial Deposit</span><span style={{fontWeight:950}}>${releaseModal.deposit || 0}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 950, marginTop: 12, paddingTop: 12, borderTop: '1px dashed #f1f5f9', color: '#000' }}><span>Refund</span><span style={{color:'#10b981'}}>${releaseModal.deposit || 0}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#000', fontWeight: 950 }}><span>Initial Deposit</span><span style={{fontWeight:950}}>₹{releaseModal.deposit || 0}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 950, marginTop: 12, paddingTop: 12, borderTop: '1px dashed #f1f5f9', color: '#000' }}><span>Refund</span><span style={{color:'#10b981'}}>₹{releaseModal.deposit || 0}</span></div>
           </div>
           <button onClick={handleRelease} disabled={saving} style={{ width: '100%', padding: '14px', background: '#be123c', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 950, cursor: 'pointer' }}>Confirm Release</button>
         </Modal>

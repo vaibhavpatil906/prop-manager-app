@@ -4,10 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import Sidebar, { TopBar } from '@/app/components/Sidebar'
 
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, width = 520 }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 40px #0003' }}>
+      <div style={{ background: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 40px #0003' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#000' }}>{title}</h3>
           <button onClick={onClose} style={{ background: '#f5f5f5', border: 'none', borderRadius: 12, width: 32, height: 32, cursor: 'pointer', fontSize: 16, color: '#000' }}>✕</button>
@@ -140,7 +140,7 @@ export default function Properties() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {units.map(u => (
               <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#fff', border: '1px solid #f1f5f9', borderRadius: 12 }}>
-                <div style={{ fontSize: 14, fontWeight: 900, color: '#000' }}>Unit {u.unit_number} <span style={{ color: '#6366f1', marginLeft: 8, fontWeight: 800 }}>${u.rent}</span></div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: '#000' }}>Unit {u.unit_number} <span style={{ color: '#6366f1', marginLeft: 8, fontWeight: 800 }}>₹{u.rent}</span></div>
                 <button onClick={() => deleteUnit(u.id)} style={{ color: '#be123c', background: 'none', border: 'none', fontSize: 14, fontWeight: 950 }}>✕</button>
               </div>
             ))}
