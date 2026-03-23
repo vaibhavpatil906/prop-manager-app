@@ -39,10 +39,10 @@ export default function Settings() {
     setSaving(false)
   }
 
-  const labelS = { fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 6, textTransform: 'uppercase' }
-  const inputS = { width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #e5e7eb', fontSize: 14, boxSizing: 'border-box', outline: 'none', marginBottom: 20 }
+  const labelS = { fontSize: 11, fontWeight: 900, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }
+  const inputS = { width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 14, boxSizing: 'border-box', outline: 'none', marginBottom: 20, color: '#000', fontWeight: 700 }
 
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>Loading...</div>
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 800 }}>Loading...</div>
 
   return (
     <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
@@ -52,11 +52,11 @@ export default function Settings() {
         
         <div style={{ padding: '24px 16px', maxWidth: 600, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
           <div style={{ marginBottom: 32 }}>
-            <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0 }}>Settings</h2>
-            <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>Configure your business details for invoices</p>
+            <h2 style={{ fontSize: 24, fontWeight: 950, color: '#000', margin: 0 }}>Settings</h2>
+            <p style={{ color: '#000', fontSize: 14, marginTop: 4, fontWeight: 600 }}>Configure your business details for invoices</p>
           </div>
 
-          {loading ? <div style={{textAlign:'center', padding:60, color:'#94a3b8'}}>Loading...</div> : (
+          {loading ? <div style={{textAlign:'center', padding:60, color:'#000', fontWeight: 800}}>Loading...</div> : (
             <div style={{ background: '#fff', borderRadius: 24, padding: 24, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
               
               <label style={labelS}>Business Name</label>
@@ -72,19 +72,19 @@ export default function Settings() {
               <input value={profile.business_logo} onChange={e => setProfile({...profile, business_logo: e.target.value})} placeholder="https://..." style={inputS} />
 
               <div style={{ background: '#f8fafc', padding: 20, borderRadius: 16, marginBottom: 32, border: '1px dashed #e2e8f0' }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: '#6366f1', marginBottom: 12 }}>INVOICE PREVIEW</div>
+                <div style={{ fontSize: 11, fontWeight: 900, color: '#6366f1', marginBottom: 12 }}>INVOICE PREVIEW</div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <div style={{ width: 40, height: 40, borderRadius: 8, background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, overflow: 'hidden' }}>
                     {profile.business_logo ? <img src={profile.business_logo} style={{width:'100%', height:'100%', objectFit:'cover'}} /> : '🏘️'}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{profile.business_name || 'Business Name'}</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>{profile.business_address || 'Address'}</div>
+                    <div style={{ fontWeight: 950, fontSize: 15, color: '#000' }}>{profile.business_name || 'Business Name'}</div>
+                    <div style={{ fontSize: 11, color: '#000', fontWeight: 700 }}>{profile.business_address || 'Address'}</div>
                   </div>
                 </div>
               </div>
 
-              <button onClick={saveProfile} disabled={saving} style={{ width: '100%', padding: '16px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 16, fontWeight: 800, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+              <button onClick={saveProfile} disabled={saving} style={{ width: '100%', padding: '16px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 16, fontWeight: 900, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
                 {saving ? 'Saving...' : 'Save Branding Changes'}
               </button>
             </div>

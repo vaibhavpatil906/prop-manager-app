@@ -18,12 +18,12 @@ function StatCard({ label, value, sub, accent, iconKey }) {
   return (
     <div style={{ background: '#fff', borderRadius: 20, padding: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9', flex: 1, minWidth: 160, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+        <div style={{ fontSize: 11, color: '#1a1a2e', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
         <div style={{ background: `${accent}10`, color: accent, padding: 6, borderRadius: 10 }}>{statIcons[iconKey]}</div>
       </div>
       <div>
         <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: -1 }}>{value}</div>
-        {sub && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2, fontWeight: 500 }}>{sub}</div>}
+        {sub && <div style={{ fontSize: 12, color: '#1a1a2e', marginTop: 2, fontWeight: 600 }}>{sub}</div>}
       </div>
     </div>
   )
@@ -38,7 +38,7 @@ function Badge({ label }) {
     'In Progress': { bg: '#eff6ff', color: '#2563eb', dot: '#3b82f6' },
     Resolved: { bg: '#ecfdf5', color: '#059669', dot: '#10b981' },
   }
-  const s = colors[label] || { bg: '#f8fafc', color: '#64748b', dot: '#94a3b8' }
+  const s = colors[label] || { bg: '#f8fafc', color: '#1a1a2e', dot: '#1a1a2e' }
   return (
     <span style={{ background: s.bg, color: s.color, padding: '4px 10px', borderRadius: 20, fontSize: 10, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5, textTransform: 'uppercase' }}>
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.dot }} />
@@ -98,7 +98,7 @@ export default function Dashboard() {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', background: '#f8fafc' }}>Loading Dashboard...</div>
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', background: '#f8fafc' }}>Loading Dashboard...</div>
 
   return (
     <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, -apple-system, sans-serif', display: 'flex' }}>
@@ -110,11 +110,11 @@ export default function Dashboard() {
         <div style={{ padding: '24px 16px', maxWidth: 1100, width: '100%', boxSizing: 'border-box' }}>
           <div style={{ marginBottom: 24 }}>
             <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: -0.5 }}>{greeting}! 👋</h2>
-            <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: 14, fontWeight: 500 }}>Here's your portfolio overview.</p>
+            <p style={{ color: '#000', margin: '4px 0 0', fontSize: 14, fontWeight: 600 }}>Here's your portfolio overview.</p>
           </div>
 
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Gathering your stats...</div>
+            <div style={{ textAlign: 'center', padding: 80, color: '#000', fontWeight: 700 }}>Gathering your stats...</div>
           ) : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 12 }}>
@@ -138,7 +138,7 @@ export default function Dashboard() {
                   <button key={c.label} onClick={() => router.push(c.path)}
                     style={{ 
                       background: '#fff', color: c.color, border: '1px solid #e2e8f0', 
-                      borderRadius: 12, padding: '12px 20px', fontWeight: 700, 
+                      borderRadius: 12, padding: '12px 20px', fontWeight: 800, 
                       fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexShrink: 0
                     }}>
@@ -150,18 +150,18 @@ export default function Dashboard() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
                 <div style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Recent Payments</h3>
-                    <button onClick={() => router.push('/payments')} style={{ background: '#f8fafc', border: 'none', color: '#6366f1', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '4px 10px', borderRadius: 6 }}>All</button>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#0f172a' }}>Recent Payments</h3>
+                    <button onClick={() => router.push('/payments')} style={{ background: '#f8fafc', border: 'none', color: '#6366f1', fontSize: 12, fontWeight: 800, cursor: 'pointer', padding: '4px 10px', borderRadius: 6 }}>All</button>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {recentPayments.map(p => (
                       <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>{p.tenant?.name || '—'}</div>
-                          <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{p.due_date}</div>
+                          <div style={{ fontWeight: 800, fontSize: 14, color: '#1e293b' }}>{p.tenant?.name || '—'}</div>
+                          <div style={{ fontSize: 11, color: '#000', fontWeight: 700 }}>{p.due_date}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: 900, fontSize: 14, color: '#0f172a' }}>${Number(p.amount).toLocaleString()}</div>
+                          <div style={{ fontWeight: 950, fontSize: 14, color: '#0f172a' }}>${Number(p.amount).toLocaleString()}</div>
                           <Badge label={p.status} />
                         </div>
                       </div>
@@ -171,17 +171,17 @@ export default function Dashboard() {
 
                 <div style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Open Issues</h3>
-                    <button onClick={() => router.push('/maintenance')} style={{ background: '#f8fafc', border: 'none', color: '#6366f1', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '4px 10px', borderRadius: 6 }}>All</button>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#0f172a' }}>Open Issues</h3>
+                    <button onClick={() => router.push('/maintenance')} style={{ background: '#f8fafc', border: 'none', color: '#6366f1', fontSize: 12, fontWeight: 800, cursor: 'pointer', padding: '4px 10px', borderRadius: 6 }}>All</button>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {recentMaintenance.map(m => (
                       <div key={m.id}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', flex: 1 }}>{m.issue}</div>
+                          <div style={{ fontWeight: 800, fontSize: 14, color: '#1e293b', flex: 1 }}>{m.issue}</div>
                           <Badge label={m.status} />
                         </div>
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, fontWeight: 500 }}>{m.tenant?.name} · Unit {m.unit?.unit_number}</div>
+                        <div style={{ fontSize: 11, color: '#000', marginTop: 4, fontWeight: 700 }}>{m.tenant?.name} · Unit {m.unit?.unit_number}</div>
                       </div>
                     ))}
                   </div>

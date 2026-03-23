@@ -9,8 +9,8 @@ function Modal({ title, onClose, children, width = 500 }) {
     <div style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
       <div style={{ background: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 40px #0003' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{title}</h3>
-          <button onClick={onClose} style={{ background: '#f5f5f5', border: 'none', borderRadius: 12, width: 32, height: 32, cursor: 'pointer', fontSize: 16 }}>✕</button>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#000' }}>{title}</h3>
+          <button onClick={onClose} style={{ background: '#f5f5f5', border: 'none', borderRadius: 12, width: 32, height: 32, cursor: 'pointer', fontSize: 16, color: '#000' }}>✕</button>
         </div>
         {children}
       </div>
@@ -26,7 +26,7 @@ function Badge({ label }) {
   }
   const s = colors[label] || colors.Open
   return (
-    <span style={{ background: s.bg, color: s.color, padding: '4px 12px', borderRadius: 20, fontSize: 10, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5, textTransform: 'uppercase' }}>
+    <span style={{ background: s.bg, color: s.color, padding: '4px 12px', borderRadius: 20, fontSize: 10, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 5, textTransform: 'uppercase' }}>
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.dot }} />
       {label}
     </span>
@@ -87,13 +87,13 @@ export default function Maintenance() {
 
   const inp = (label, key, type = 'text') => (
     <div style={{ marginBottom: 16 }}>
-      <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>{label}</label>
+      <label style={{ fontSize: 11, fontWeight: 900, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>{label}</label>
       <input type={type} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })}
-        style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: 12, fontSize: 14, boxSizing: 'border-box' }} />
+        style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', color: '#000', fontWeight: 700 }} />
     </div>
   )
 
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>Loading...</div>
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 800 }}>Loading...</div>
 
   return (
     <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
@@ -104,9 +104,9 @@ export default function Maintenance() {
         <div style={{ padding: '24px 16px', maxWidth: 1100, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 32 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0 }}>Maintenance</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 950, color: '#000', margin: 0 }}>Maintenance</h2>
               <button onClick={() => { setForm({ tenant_id: '', unit_id: '', issue: '', description: '', priority: 'Medium', status: 'Open' }); setModal('new') }} 
-                style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 20px', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
+                style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 24px', fontWeight: 900, cursor: 'pointer', fontSize: 13 }}>
                 + Add Issue
               </button>
             </div>
@@ -114,29 +114,29 @@ export default function Maintenance() {
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
               {['All', 'Open', 'In Progress', 'Resolved'].map(s => (
                 <button key={s} onClick={() => setFilter(s)}
-                  style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 10, border: '1px solid #e2e8f0', background: filter === s ? '#1a1a2e' : '#fff', color: filter === s ? '#fff' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 10, border: '1px solid #e2e8f0', background: filter === s ? '#000' : '#fff', color: filter === s ? '#fff' : '#000', fontWeight: 900, fontSize: 12, cursor: 'pointer' }}>
                   {s}
                 </button>
               ))}
             </div>
           </div>
 
-          {loading ? <div style={{textAlign:'center', padding:60, color:'#94a3b8'}}>Loading...</div> : (
+          {loading ? <div style={{textAlign:'center', padding:60, color:'#000', fontWeight: 800}}>Loading...</div> : (
             <div className="maintenance-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
               {filtered.map(r => (
                 <div key={r.id} style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                    <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 15, flex: 1, marginRight: 12 }}>{r.issue}</div>
+                    <div style={{ fontWeight: 950, color: '#000', fontSize: 15, flex: 1, marginRight: 12 }}>{r.issue}</div>
                     <Badge label={r.status} />
                   </div>
-                  {r.description && <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>{r.description}</p>}
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, padding: '12px 0', borderTop: '1px solid #f8fafc' }}>
+                  {r.description && <p style={{ margin: '0 0 16px', fontSize: 13, color: '#000', lineHeight: 1.4, fontWeight: 600 }}>{r.description}</p>}
+                  <div style={{ fontSize: 12, color: '#000', fontWeight: 800, padding: '12px 0', borderTop: '1px solid #f1f5f9' }}>
                     {r.tenant?.name || 'Unknown'} · Unit {r.unit?.unit_number}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    {r.status === 'Open' && <button onClick={() => updateStatus(r.id, 'In Progress')} style={{ flex: 1, padding: '8px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>In Progress</button>}
-                    {r.status === 'In Progress' && <button onClick={() => updateStatus(r.id, 'Resolved')} style={{ flex: 1, padding: '8px', background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>Resolved</button>}
-                    <button onClick={() => deleteRequest(r.id)} style={{ padding: '8px 12px', background: '#fff1f2', color: '#be123c', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>✕</button>
+                    {r.status === 'Open' && <button onClick={() => updateStatus(r.id, 'In Progress')} style={{ flex: 1, padding: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #2563eb', borderRadius: 8, fontSize: 11, fontWeight: 900 }}>In Progress</button>}
+                    {r.status === 'In Progress' && <button onClick={() => updateStatus(r.id, 'Resolved')} style={{ flex: 1, padding: '8px', background: '#ecfdf5', color: '#059669', border: '1px solid #059669', borderRadius: 8, fontSize: 11, fontWeight: 900 }}>Resolved</button>}
+                    <button onClick={() => deleteRequest(r.id)} style={{ padding: '8px 12px', background: '#fff1f2', color: '#be123c', border: '1px solid #f1f5f9', borderRadius: 8, fontSize: 11, fontWeight: 900 }}>✕</button>
                   </div>
                 </div>
               ))}

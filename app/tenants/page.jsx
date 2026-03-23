@@ -10,7 +10,7 @@ function Modal({ title, onClose, children, width = 520 }) {
       <div style={{ background: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 40px #0003' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#1a1a2e' }}>{title}</h3>
-          <button onClick={onClose} style={{ background: '#f5f5f5', border: 'none', borderRadius: 12, width: 32, height: 32, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+          <button onClick={onClose} style={{ background: '#f5f5f5', border: 'none', borderRadius: 12, width: 32, height: 32, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000' }}>✕</button>
         </div>
         {children}
       </div>
@@ -22,7 +22,7 @@ function Badge({ label }) {
   const colors = {
     Active: { bg: '#e8faf0', color: '#1a7a45', dot: '#22c55e' },
     Late: { bg: '#fdf2f2', color: '#991b1b', dot: '#ef4444' },
-    Inactive: { bg: '#f5f5f5', color: '#888', dot: '#ccc' },
+    Inactive: { bg: '#f5f5f5', color: '#000', dot: '#000' },
   }
   const s = colors[label] || colors.Inactive
   return (
@@ -48,7 +48,6 @@ export default function Tenants() {
   const [leaseFile, setLeaseFile] = useState(null)
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', unit_id: '', rent: '', deposit: '', status: 'Active' })
-  const [releaseForm, setReleaseForm] = useState({ deductions: '0', reason: 'Lease Ended' })
 
   const fetchAll = async () => {
     setLoading(true)
@@ -93,7 +92,6 @@ export default function Tenants() {
         if (error) throw error
       }
 
-      // Handle Lease File Upload
       if (leaseFile && tenantId) {
         const ext = leaseFile.name.split('.').pop()
         const path = `${user.id}/${tenantId}/${Date.now()}.${ext}`
@@ -128,13 +126,13 @@ export default function Tenants() {
 
   const inp = (label, key, state, setState, type = 'text') => (
     <div style={{ marginBottom: 16 }}>
-      <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>{label}</label>
+      <label style={{ fontSize: 11, fontWeight: 800, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>{label}</label>
       <input type={type} value={state[key]} onChange={e => setState({ ...state, [key]: e.target.value })}
-        style={{ width: '100%', padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', outline: 'none' }} />
+        style={{ width: '100%', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', outline: 'none', color: '#000', fontWeight: 600 }} />
     </div>
   )
 
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>Loading...</div>
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 700 }}>Loading...</div>
 
   return (
     <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
@@ -152,37 +150,37 @@ export default function Tenants() {
               </button>
             </div>
             <input placeholder="Search residents..." value={search} onChange={e => setSearch(e.target.value)} 
-              style={{ padding: '12px 16px', border: '1px solid #e2e8f0', borderRadius: 14, fontSize: 14, width: '100%', outline: 'none', background: '#fff', boxSizing: 'border-box' }} />
+              style={{ padding: '12px 16px', border: '1px solid #e2e8f0', borderRadius: 14, fontSize: 14, width: '100%', outline: 'none', background: '#fff', boxSizing: 'border-box', color: '#000', fontWeight: 600 }} />
           </div>
 
-          {loading ? <div style={{textAlign:'center', padding:60, color:'#94a3b8'}}>Fetching residents...</div> : (
+          {loading ? <div style={{textAlign:'center', padding:60, color:'#000', fontWeight: 700}}>Fetching residents...</div> : (
             <div className="residents-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
               {filtered.map(t => (
                 <div key={t.id} style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                     <div>
-                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 16 }}>{t.name}</div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{t.email}</div>
+                      <div style={{ fontWeight: 900, color: '#0f172a', fontSize: 16 }}>{t.name}</div>
+                      <div style={{ fontSize: 12, color: '#000', marginTop: 2, fontWeight: 700 }}>{t.email}</div>
                     </div>
                     <Badge label={t.status} />
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: '16px 0', borderTop: '1px solid #f8fafc', borderBottom: '1px solid #f8fafc' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: '16px 0', borderTop: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0' }}>
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Assigned Unit</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#6366f1', marginTop: 4 }}>{t.unit ? `Unit ${t.unit.unit_number}` : 'N/A'}</div>
+                      <div style={{ fontSize: 10, fontWeight: 900, color: '#000', textTransform: 'uppercase' }}>Assigned Unit</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#6366f1', marginTop: 4 }}>{t.unit ? `Unit ${t.unit.unit_number}` : 'N/A'}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Monthly Rent</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>${Number(t.rent).toLocaleString()}</div>
+                      <div style={{ fontSize: 10, fontWeight: 900, color: '#000', textTransform: 'uppercase' }}>Monthly Rent</div>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a', marginTop: 4 }}>${Number(t.rent).toLocaleString()}</div>
                     </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-                    <button onClick={() => setLeasesModal(t)} style={{ background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px', fontSize: 12, fontWeight: 700, flex: 1, cursor: 'pointer' }}>Docs</button>
-                    <button onClick={() => openEdit(t)} style={{ background: '#f0f9ff', color: '#075985', border: 'none', borderRadius: 10, padding: '10px', fontSize: 12, fontWeight: 700, flex: 1, cursor: 'pointer' }}>Edit</button>
+                    <button onClick={() => setLeasesModal(t)} style={{ background: '#f8fafc', color: '#000', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px', fontSize: 12, fontWeight: 800, flex: 1, cursor: 'pointer' }}>Docs</button>
+                    <button onClick={() => openEdit(t)} style={{ background: '#f0f9ff', color: '#075985', border: 'none', borderRadius: 10, padding: '10px', fontSize: 12, fontWeight: 800, flex: 1, cursor: 'pointer' }}>Edit</button>
                     {t.status === 'Active' && (
-                      <button onClick={() => setReleaseModal(t)} style={{ flex: 1.5, padding: '10px', background: '#fff1f2', color: '#be123c', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Release Resident</button>
+                      <button onClick={() => setReleaseModal(t)} style={{ flex: 1.5, padding: '10px', background: '#fff1f2', color: '#be123c', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Release Resident</button>
                     )}
                   </div>
                 </div>
@@ -193,13 +191,13 @@ export default function Tenants() {
       </div>
 
       {modal && (
-        <Modal title={modal === 'new' ? 'Onboarding' : 'Edit Resident'} onClose={() => setModal(null)}>
+        <Modal title="Onboarding" onClose={() => setModal(null)}>
           {inp('Full Name', 'name', form, setForm)}
           {inp('Email', 'email', form, setForm, 'email')}
           {inp('Phone', 'phone', form, setForm, 'tel')}
           <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 6 }}>SELECT UNIT</label>
-            <select value={form.unit_id} onChange={e => setForm({ ...form, unit_id: e.target.value })} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: 12, fontSize: 14 }}>
+            <label style={{ fontSize: 11, fontWeight: 800, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>SELECT UNIT</label>
+            <select value={form.unit_id} onChange={e => setForm({ ...form, unit_id: e.target.value })} style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, color: '#000', fontWeight: 600 }}>
               <option value="">— Choose Unit —</option>
               {modal !== 'new' && tenants.find(t => t.id === modal.id)?.unit && (
                 <option value={tenants.find(t => t.id === modal.id).unit_id}>
@@ -214,10 +212,10 @@ export default function Tenants() {
             {inp('Deposit ($)', 'deposit', form, setForm, 'number')}
           </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 6 }}>LEASE AGREEMENT</label>
-            <input type="file" accept=".pdf" onChange={e => setLeaseFile(e.target.files[0])} style={{ fontSize: 12 }} />
+            <label style={{ fontSize: 11, fontWeight: 800, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>LEASE AGREEMENT</label>
+            <input type="file" accept=".pdf" onChange={e => setLeaseFile(e.target.files[0])} style={{ fontSize: 12, color: '#000', fontWeight: 600 }} />
           </div>
-          <button onClick={saveTenant} disabled={saving} style={{ width: '100%', padding: '14px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
+          <button onClick={saveTenant} disabled={saving} style={{ width: '100%', padding: '14px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 900, cursor: 'pointer' }}>
             {saving ? 'Saving...' : modal === 'new' ? 'Complete Onboarding' : 'Save Changes'}
           </button>
         </Modal>
@@ -225,25 +223,29 @@ export default function Tenants() {
 
       {releaseModal && (
         <Modal title="Release" onClose={() => setReleaseModal(null)}>
-          <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.5, marginBottom: 20 }}>Setting <b>{releaseModal.name}</b> to Inactive and marking Unit <b>{releaseModal.unit?.unit_number}</b> as Vacant.</p>
-          <div style={{ background: '#f8fafc', borderRadius: 16, padding: 20, marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}><span>Initial Deposit</span><span style={{fontWeight:700}}>${releaseModal.deposit || 0}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 900, marginTop: 12, paddingTop: 12, borderTop: '1px dashed #e2e8f0' }}><span>Refund</span><span style={{color:'#10b981'}}>${releaseModal.deposit || 0}</span></div>
+          <p style={{ fontSize: 14, color: '#000', lineHeight: 1.5, marginBottom: 20, fontWeight: 600 }}>Setting <b>{releaseModal.name}</b> to Inactive and marking Unit <b>{releaseModal.unit?.unit_number}</b> as Vacant.</p>
+          <div style={{ background: '#f8fafc', borderRadius: 16, padding: 20, marginBottom: 20, border: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#000', fontWeight: 700 }}><span>Initial Deposit</span><span style={{fontWeight:900}}>${releaseModal.deposit || 0}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 950, marginTop: 12, paddingTop: 12, borderTop: '1px dashed #e2e8f0', color: '#000' }}><span>Refund</span><span style={{color:'#10b981'}}>${releaseModal.deposit || 0}</span></div>
           </div>
-          <button onClick={handleRelease} disabled={saving} style={{ width: '100%', padding: '14px', background: '#be123c', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>Confirm Release</button>
+          <button onClick={handleRelease} disabled={saving} style={{ width: '100%', padding: '14px', background: '#be123c', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 900, cursor: 'pointer' }}>Confirm Release</button>
         </Modal>
       )}
 
       {leasesModal && (
         <Modal title="Resident Documents" onClose={() => setLeasesModal(null)}>
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: '#1a1a2e' }}>{leasesModal.name}</div>
+            <div style={{ fontSize: 13, color: '#000', fontWeight: 700 }}>Unit {leasesModal.unit?.unit_number}</div>
+          </div>
           {leases.filter(l => l.tenant_id === leasesModal.id).length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No documents uploaded.</div>
+            <div style={{ textAlign: 'center', padding: 40, color: '#000', fontWeight: 700 }}>No documents uploaded.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {leases.filter(l => l.tenant_id === leasesModal.id).map(l => (
-                <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 16, background: '#f8fafc', borderRadius: 16 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{l.file_name}</div>
-                  <a href={l.file_url} target="_blank" rel="noreferrer" style={{ background: '#1a1a2e', color: '#fff', padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>View</a>
+                <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 16, background: '#f8fafc', borderRadius: 16, border: '1px solid #f1f5f9' }}>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: '#1a1a2e' }}>{l.file_name}</div>
+                  <a href={l.file_url} target="_blank" rel="noreferrer" style={{ background: '#1a1a2e', color: '#fff', padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 800, textDecoration: 'none' }}>View</a>
                 </div>
               ))}
             </div>

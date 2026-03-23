@@ -9,8 +9,8 @@ function Modal({ title, onClose, children }) {
     <div style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
       <div style={{ background: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 40px #0003' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{title}</h3>
-          <button onClick={onClose} style={{ background: '#f5f5f5', border: 'none', borderRadius: 8, width: 32, height: 32, cursor: 'pointer', fontSize: 16 }}>✕</button>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#000' }}>{title}</h3>
+          <button onClick={onClose} style={{ background: '#f5f5f5', border: 'none', borderRadius: 12, width: 32, height: 32, cursor: 'pointer', fontSize: 16, color: '#000' }}>✕</button>
         </div>
         {children}
       </div>
@@ -74,7 +74,7 @@ export default function Properties() {
     fetchUnits(unitModal.id)
   }
 
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>Loading...</div>
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 800 }}>Loading...</div>
 
   return (
     <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
@@ -84,24 +84,24 @@ export default function Properties() {
         
         <div style={{ padding: '24px 16px', maxWidth: 1100, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-            <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0 }}>Properties</h2>
+            <h2 style={{ fontSize: 24, fontWeight: 950, color: '#000', margin: 0 }}>Properties</h2>
             <button onClick={() => { setForm({ name: '', address: '', units: '' }); setModal('new') }}
-              style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 20px', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
+              style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 24px', fontWeight: 900, cursor: 'pointer', fontSize: 13 }}>
               + Add
             </button>
           </div>
 
-          {loading ? <div style={{textAlign:'center', padding:60, color:'#94a3b8'}}>Loading...</div> : (
+          {loading ? <div style={{textAlign:'center', padding:60, color:'#000', fontWeight: 800}}>Loading...</div> : (
             <div className="properties-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
               {properties.map(p => (
                 <div key={p.id} style={{ background: '#fff', borderRadius: 20, padding: 24, boxShadow: '0 2px 4px rgba(0,0,0,0.02)', border: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: 36, marginBottom: 16 }}>🏠</div>
-                  <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 800, color: '#0f172a' }}>{p.name}</h3>
-                  <p style={{ margin: '0 0 20px', fontSize: 14, color: '#64748b', lineHeight: 1.4 }}>{p.address}</p>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button onClick={() => { setUnitModal(p); fetchUnits(p.id) }} style={{ background: '#f0f9ff', color: '#075985', border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Units</button>
-                    <button onClick={() => { setForm({ name: p.name, address: p.address, units: p.units }); setModal(p) }} style={{ background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Edit</button>
-                    <button onClick={() => deleteProperty(p.id)} style={{ background: '#fff1f2', color: '#be123c', border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Delete</button>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 950, color: '#000' }}>{p.name}</h3>
+                  <p style={{ margin: '0 0 20px', fontSize: 14, color: '#000', lineHeight: 1.4, fontWeight: 600 }}>{p.address}</p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid #f1f5f9', paddingTop: 16 }}>
+                    <button onClick={() => { setUnitModal(p); fetchUnits(p.id) }} style={{ background: '#f0f9ff', color: '#075985', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 16px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Units</button>
+                    <button onClick={() => { setForm({ name: p.name, address: p.address, units: p.units }); setModal(p) }} style={{ background: '#f8fafc', color: '#000', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 16px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Edit</button>
+                    <button onClick={() => deleteProperty(p.id)} style={{ background: '#fff1f2', color: '#be123c', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 16px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Delete</button>
                   </div>
                 </div>
               ))}
@@ -118,30 +118,30 @@ export default function Properties() {
             ['Number of Units', 'units', 'number']
           ].map(([label, key, type]) => (
             <div key={key} style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>{label}</label>
+              <label style={{ fontSize: 11, fontWeight: 900, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>{label}</label>
               <input type={type} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })}
-                style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: 12, fontSize: 14, boxSizing: 'border-box' }} />
+                style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', color: '#000', fontWeight: 700 }} />
             </div>
           ))}
-          <button onClick={saveProperty} disabled={saving} style={{ width: '100%', padding: '14px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer', marginTop: 10 }}>Save Property</button>
+          <button onClick={saveProperty} disabled={saving} style={{ width: '100%', padding: '14px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 950, cursor: 'pointer', marginTop: 10 }}>Save Property</button>
         </Modal>
       )}
 
       {unitModal && (
         <Modal title={'Units - ' + unitModal.name} onClose={() => setUnitModal(null)}>
-          <div style={{ marginBottom: 24, padding: 16, background: '#f8fafc', borderRadius: 16 }}>
-            <h4 style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 800, color: '#64748b' }}>ADD UNIT</h4>
+          <div style={{ marginBottom: 24, padding: 16, background: '#f8fafc', borderRadius: 16, border: '1px solid #f1f5f9' }}>
+            <h4 style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 950, color: '#000' }}>ADD UNIT</h4>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <input placeholder="Unit #" value={unitForm.unit_number} onChange={e => setUnitForm({ ...unitForm, unit_number: e.target.value })} style={{ flex: 1, minWidth: 80, padding: '10px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14 }} />
-              <input placeholder="Rent" type="number" value={unitForm.rent} onChange={e => setUnitForm({ ...unitForm, rent: e.target.value })} style={{ width: 80, padding: '10px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14 }} />
-              <button onClick={saveUnit} style={{ padding: '10px 16px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700 }}>Add</button>
+              <input placeholder="Unit #" value={unitForm.unit_number} onChange={e => setUnitForm({ ...unitForm, unit_number: e.target.value })} style={{ flex: 1, minWidth: 80, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#000', fontWeight: 700 }} />
+              <input placeholder="Rent" type="number" value={unitForm.rent} onChange={e => setUnitForm({ ...unitForm, rent: e.target.value })} style={{ width: 80, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#000', fontWeight: 700 }} />
+              <button onClick={saveUnit} style={{ padding: '10px 16px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 900 }}>Add</button>
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {units.map(u => (
               <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#fff', border: '1px solid #f1f5f9', borderRadius: 12 }}>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>Unit {u.unit_number} <span style={{ color: '#94a3b8', marginLeft: 8, fontWeight: 500 }}>${u.rent}</span></div>
-                <button onClick={() => deleteUnit(u.id)} style={{ color: '#be123c', background: 'none', border: 'none', fontSize: 12, fontWeight: 700 }}>✕</button>
+                <div style={{ fontSize: 14, fontWeight: 900, color: '#000' }}>Unit {u.unit_number} <span style={{ color: '#6366f1', marginLeft: 8, fontWeight: 800 }}>${u.rent}</span></div>
+                <button onClick={() => deleteUnit(u.id)} style={{ color: '#be123c', background: 'none', border: 'none', fontSize: 14, fontWeight: 950 }}>✕</button>
               </div>
             ))}
           </div>
