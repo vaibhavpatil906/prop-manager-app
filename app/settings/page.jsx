@@ -68,6 +68,9 @@ export default function Settings() {
               <label style={labelS}>Contact Number</label>
               <input value={profile.contact_number} onChange={e => setProfile({...profile, contact_number: e.target.value})} placeholder="+91 ..." style={inputS} />
 
+              <label style={labelS}>UPI ID (for Payments)</label>
+              <input value={profile.upi_id || ''} onChange={e => setProfile({...profile, upi_id: e.target.value})} placeholder="yourname@okaxis" style={inputS} />
+
               <label style={labelS}>Logo URL</label>
               <input value={profile.business_logo} onChange={e => setProfile({...profile, business_logo: e.target.value})} placeholder="https://..." style={inputS} />
 

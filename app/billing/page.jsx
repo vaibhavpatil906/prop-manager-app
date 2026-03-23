@@ -18,16 +18,27 @@ function InvoiceModal({ data, onClose }) {
 
   const print = () => window.print()
   const energyUnits = data.curr_reading - data.prev_reading
-  const displayMonth = data.billing_month ? new Date(data.billing_month + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'N/A'
+  let energyBill = energyUnits * data.rate_per_unit
+  if (energyBill > 0 && energyBill < 150) energyBill = 150
   
-  const msg = `Hi ${data.tenantName}, your bill for ${displayMonth} is generated.\n\n` +
-              `Business: ${profile?.business_name || 'PropManager'}\n` +
-              `Fixed Rent: ₹${parseFloat(data.fixed_rent).toLocaleString()}\n` +
-              `Light Bill: ₹${(energyUnits * data.rate_per_unit).toLocaleString()} (${energyUnits} units)\n` +
-              `Water Bill: ₹${parseFloat(data.water_bill || 0).toLocaleString()}\n` +
-              `Other: ₹${parseFloat(data.other_utilities || 0).toLocaleString()}\n\n` +
-              `*Total Due: ₹${parseFloat(data.total_amount || data.total).toLocaleString()}*\n` +
-              `Due Date: ${new Date(data.due_date).toLocaleDateString()}\n\nPlease pay at your earliest. Thank you!`
+  const displayMonth = data.billing_month ? new Date(data.billing_month + '-02').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'
+  
+  const upiLink = profile?.upi_id ? `upi://pay?pa=${profile.upi_id}&pn=${encodeURIComponent(profile.business_name || 'PropManager')}&am=${parseFloat(data.total_amount || data.total)}&cu=INR` : null
+
+  const msg = `🏠 *${(profile?.business_name || 'NAVASAI PROPERTIES').toUpperCase()}*\n` +
+              `_________________________\n\n` +
+              `📅 *Month:* ${displayMonth}\n` +
+              `👤 *Tenant:* ${data.tenantName}\n` +
+              `_________________________\n\n` +
+              `▫️ Rent: ₹${parseFloat(data.fixed_rent).toLocaleString()}\n` +
+              `▫️ Water: ₹${parseFloat(data.water_bill || 0).toLocaleString()}\n` +
+              `▫️ Electricity: ₹${energyBill.toLocaleString()}\n` +
+              `_________________________\n\n` +
+              `💰 *TOTAL DUE: ₹${parseFloat(data.total_amount || data.total).toLocaleString()}*\n` +
+              `_________________________\n\n` +
+              (upiLink ? `📲 *PAY NOW (Click Link below):*\n${upiLink}\n` +
+              `_________________________\n\n` : '') +
+              `_Please share screen shot/ref id after payment._`
 
   const sendWhatsApp = () => {
     const phone = data.tenantPhone?.replace(/\D/g, '')
