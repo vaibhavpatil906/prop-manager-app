@@ -2,15 +2,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import Sidebar, { TopBar } from '@/app/components/Sidebar'
+import Sidebar, { TopBar, PageLoader, TOKENS } from '@/app/components/Sidebar'
 
 function Modal({ title, onClose, children, width = 520 }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 28, padding: 32, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+      <div style={{ background: '#fff', borderRadius: TOKENS.radiusCard, padding: '32px 24px', width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} className="modal-container">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
-          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 950, color: '#0f172a', letterSpacing: -0.5 }}>{title}</h3>
-          <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: 12, width: 36, height: 32, cursor: 'pointer', fontSize: 18, color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="interactive-btn">✕</button>
+          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 950, color: TOKENS.dark, letterSpacing: -0.5 }}>{title}</h3>
+          <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: 12, width: 36, height: 32, cursor: 'pointer', fontSize: 18, color: TOKENS.dark, display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="interactive-btn">✕</button>
         </div>
         {children}
       </div>
@@ -29,9 +29,9 @@ function Badge({ label }) {
     'In Progress': { bg: '#eff6ff', color: '#2563eb', dot: '#3b82f6' },
     Resolved: { bg: '#ecfdf5', color: '#059669', dot: '#10b981' },
   }
-  const s = colors[label] || { bg: '#f8fafc', color: '#0f172a', dot: '#0f172a' }
+  const s = colors[label] || { bg: '#f8fafc', color: TOKENS.dark, dot: TOKENS.dark }
   return (
-    <span style={{ background: s.bg, color: s.color, padding: '6px 14px', borderRadius: 20, fontSize: 10, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <span style={{ background: s.bg, color: s.color, padding: '6px 14px', borderRadius: 20, fontSize: 10, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot }} />
       {label}
     </span>
@@ -147,71 +147,68 @@ export default function Tenants() {
 
   const inp = (label, key, state, setState, type = 'text') => (
     <div style={{ marginBottom: 20 }}>
-      <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</label>
+      <label style={{ fontSize: 11, fontWeight: 900, color: TOKENS.slate, display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</label>
       <input type={type} value={state[key]} onChange={e => setState({ ...state, [key]: e.target.value })}
-        style={{ width: '100%', padding: '14px 16px', border: '2px solid #f1f5f9', borderRadius: 16, fontSize: 15, boxSizing: 'border-box', outline: 'none', color: '#0f172a', fontWeight: 700, transition: '0.2s' }} className="focus-indigo" />
+        style={{ width: '100%', padding: '14px 16px', border: `2px solid ${TOKENS.border}`, borderRadius: 16, fontSize: 15, boxSizing: 'border-box', outline: 'none', color: TOKENS.dark, fontWeight: 700, transition: '0.2s' }} className="focus-indigo" />
     </div>
   )
 
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a', fontWeight: 950 }}>Loading Resident Records...</div>
+  if (!user) return <PageLoader message="Authenticating Session..." />
 
-  const sectionH = { fontSize: 13, fontWeight: 950, color: '#0f172a', borderBottom: '2px solid #6366f1', width: 'fit-content', paddingBottom: 4, marginBottom: 20, marginTop: 32, textTransform: 'uppercase', letterSpacing: 1 }
+  const sectionH = { fontSize: 13, fontWeight: 950, color: TOKENS.dark, borderBottom: `2px solid ${TOKENS.primary}`, width: 'fit-content', paddingBottom: 4, marginBottom: 20, marginTop: 32, textTransform: 'uppercase', letterSpacing: 1 }
 
   return (
-    <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
+    <div className="main-wrapper" style={{ minHeight: '100vh', background: TOKENS.bg, fontFamily: TOKENS.font, display: 'flex' }}>
       <Sidebar active="Tenants" open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar onMenuClick={() => setSidebarOpen(true)} />
         
-        <div style={{ padding: '32px 24px', maxWidth: 1200, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
+        <div style={{ padding: '32px 24px', maxWidth: 1200, width: '100%', boxSizing: 'border-box', margin: '0 auto' }} className="tenants-container">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 40 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 24 }}>
               <div>
-                <h2 style={{ fontSize: 32, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: -1.5 }}>Residents</h2>
-                <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: 16, fontWeight: 600 }}>Overview of all active households.</p>
+                <h2 style={{ fontSize: 'clamp(24px, 5vw, 32px)', fontWeight: 950, color: TOKENS.dark, margin: 0, letterSpacing: -1.5 }}>Residents</h2>
+                <p style={{ color: TOKENS.slate, margin: '4px 0 0', fontSize: 16, fontWeight: 600 }}>Managing active households across your units.</p>
               </div>
               <button onClick={openAdd} 
-                style={{ background: '#6366f1', color: '#fff', border: 'none', borderRadius: 16, padding: '14px 28px', fontWeight: 900, cursor: 'pointer', fontSize: 14, boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)', transition: '0.2s' }} className="interactive-btn">
+                style={{ background: TOKENS.primary, color: '#fff', border: 'none', borderRadius: TOKENS.radiusBtn, padding: '14px 28px', fontWeight: 900, cursor: 'pointer', fontSize: 14, boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)', transition: '0.2s', width: '100%', maxWidth: 'fit-content' }} className="interactive-btn mobile-full-btn">
                 + Onboard Resident
               </button>
             </div>
             <div style={{ position: 'relative' }}>
               <input placeholder="Search by name or unit number..." value={search} onChange={e => setSearch(e.target.value)} 
-                style={{ padding: '16px 20px 16px 48px', border: '1px solid #f1f5f9', borderRadius: 20, fontSize: 15, width: '100%', outline: 'none', background: '#fff', boxSizing: 'border-box', color: '#0f172a', fontWeight: 700, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }} />
-              <svg style={{ position: 'absolute', left: 18, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, color: '#94a3b8' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                style={{ padding: '16px 20px 16px 48px', border: `1px solid ${TOKENS.border}`, borderRadius: 20, fontSize: 15, width: '100%', outline: 'none', background: '#fff', boxSizing: 'border-box', color: TOKENS.dark, fontWeight: 700, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }} />
+              <svg style={{ position: 'absolute', left: 18, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, color: TOKENS.slate }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
           </div>
 
           {loading && !tenantDetailModal ? (
-            <div style={{textAlign:'center', padding:100, color:'#0f172a', fontWeight: 800}}>
-              <div className="skeleton-pulse" style={{ width: 48, height: 48, background: '#e2e8f0', borderRadius: '50%', margin: '0 auto 20px' }} />
-              Retrieving Household Data...
-            </div>
+            <PageLoader message="Retrieving Household Data..." />
           ) : (
             <div className="residents-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 20 }}>
               {filtered.map(t => (
-                <div key={t.id} onClick={() => fetchTenantDetails(t)} style={{ background: '#fff', borderRadius: 28, padding: 28, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)', cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', border: '1px solid #f1f5f9' }} className="premium-card">
+                <div key={t.id} onClick={() => fetchTenantDetails(t)} style={{ background: '#fff', borderRadius: TOKENS.radiusCard, padding: 32, boxShadow: TOKENS.shadow, cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', border: `1px solid ${TOKENS.border}` }} className="premium-card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
                     <div>
-                      <div style={{ fontWeight: 950, color: '#0f172a', fontSize: 18, letterSpacing: -0.5 }}>{t.name}</div>
-                      <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 700 }}>{t.email}</div>
+                      <div style={{ fontWeight: 950, color: TOKENS.dark, fontSize: 18, letterSpacing: -0.5 }}>{t.name}</div>
+                      <div style={{ fontSize: 13, color: TOKENS.slate, marginTop: 4, fontWeight: 700 }}>{t.email}</div>
                     </div>
                     <Badge label={t.status} />
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '20px 0', borderTop: '1px solid #f8fafc', borderBottom: '1px solid #f8fafc' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '20px 0', borderTop: `1px solid ${TOKENS.bg}`, borderBottom: `1px solid ${TOKENS.bg}` }}>
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 950, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>RESIDENCE</div>
-                      <div style={{ fontSize: 14, fontWeight: 900, color: '#6366f1', marginTop: 6 }}>{t.unit ? `Unit ${t.unit.unit_number}` : 'Unassigned'}</div>
+                      <div style={{ fontSize: 10, fontWeight: 950, color: TOKENS.slate, textTransform: 'uppercase', letterSpacing: 1 }}>RESIDENCE</div>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: TOKENS.primary, marginTop: 6 }}>{t.unit ? `Unit ${t.unit.unit_number}` : 'Unassigned'}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 950, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>BASE RENT</div>
-                      <div style={{ fontSize: 14, fontWeight: 950, color: '#0f172a', marginTop: 6 }}>₹{Number(t.rent).toLocaleString()}</div>
+                      <div style={{ fontSize: 10, fontWeight: 950, color: TOKENS.slate, textTransform: 'uppercase', letterSpacing: 1 }}>BASE RENT</div>
+                      <div style={{ fontSize: 14, fontWeight: 950, color: TOKENS.dark, marginTop: 6 }}>₹{Number(t.rent).toLocaleString()}</div>
                     </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: 12, marginTop: 24 }} onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => openEdit(t)} style={{ background: '#f8fafc', color: '#0f172a', border: '1px solid #e2e8f0', borderRadius: 14, padding: '12px', fontSize: 12, fontWeight: 900, flex: 1, cursor: 'pointer' }} className="interactive-btn">Edit Profile</button>
+                    <button onClick={() => openEdit(t)} style={{ background: TOKENS.bg, color: TOKENS.dark, border: `1px solid ${TOKENS.border}`, borderRadius: 14, padding: '12px', fontSize: 12, fontWeight: 900, flex: 1, cursor: 'pointer' }} className="interactive-btn">Edit Profile</button>
                     {t.status === 'Active' && (
                       <button onClick={() => setReleaseModal(t)} style={{ flex: 1.5, padding: '12px', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 14, fontSize: 12, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">Release Resident</button>
                     )}
@@ -225,34 +222,34 @@ export default function Tenants() {
 
       {tenantDetailModal && (
         <Modal title={`Resident Profile: ${tenantDetailModal.name}`} onClose={() => setTenantDetailModal(null)} width={900}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, background: '#f8fafc', padding: 28, borderRadius: 24, border: '1px solid #f1f5f9' }}>
-            <div><div style={{fontSize:10, fontWeight: 950, color:'#94a3b8', letterSpacing: 1, marginBottom: 6}}>EMAIL ADDRESS</div><div style={{fontWeight:900, color:'#0f172a', fontSize: 15}}>{tenantDetailModal.email}</div></div>
-            <div><div style={{fontSize:10, fontWeight: 950, color:'#94a3b8', letterSpacing: 1, marginBottom: 6}}>CONTACT PHONE</div><div style={{fontWeight:900, color:'#0f172a', fontSize: 15}}>{tenantDetailModal.phone || '—'}</div></div>
-            <div><div style={{fontSize:10, fontWeight: 950, color:'#94a3b8', letterSpacing: 1, marginBottom: 6}}>CURRENT UNIT</div><div style={{fontWeight:900, color:'#6366f1', fontSize: 15}}>Unit {tenantDetailModal.unit?.unit_number} ({tenantDetailModal.unit?.property?.name})</div></div>
-            <div><div style={{fontSize:10, fontWeight: 950, color:'#94a3b8', letterSpacing: 1, marginBottom: 6}}>SECURITY DEPOSIT</div><div style={{fontWeight:900, color:'#0f172a', fontSize: 15}}>₹{tenantDetailModal.deposit?.toLocaleString()}</div></div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, background: TOKENS.bg, padding: 28, borderRadius: 24, border: `1px solid ${TOKENS.border}` }}>
+            <div><div style={{fontSize:10, fontWeight: 950, color: TOKENS.slate, letterSpacing: 1, marginBottom: 6}}>EMAIL ADDRESS</div><div style={{fontWeight:900, color: TOKENS.dark, fontSize: 15}}>{tenantDetailModal.email}</div></div>
+            <div><div style={{fontSize:10, fontWeight: 950, color: TOKENS.slate, letterSpacing: 1, marginBottom: 6}}>CONTACT PHONE</div><div style={{fontWeight:900, color: TOKENS.dark, fontSize: 15}}>{tenantDetailModal.phone || '—'}</div></div>
+            <div><div style={{fontSize:10, fontWeight: 950, color: TOKENS.slate, letterSpacing: 1, marginBottom: 6}}>CURRENT UNIT</div><div style={{fontWeight:900, color: TOKENS.primary, fontSize: 15}}>Unit {tenantDetailModal.unit?.unit_number} ({tenantDetailModal.unit?.property?.name})</div></div>
+            <div><div style={{fontSize:10, fontWeight: 950, color: TOKENS.slate, letterSpacing: 1, marginBottom: 6}}>SECURITY DEPOSIT</div><div style={{fontWeight:900, color: TOKENS.dark, fontSize: 15}}>₹{tenantDetailModal.deposit?.toLocaleString()}</div></div>
           </div>
 
           <div style={sectionH}>Financial Ledger</div>
-          <div style={{ overflowX: 'auto', borderRadius: 20, border: '1px solid #f1f5f9' }}>
+          <div style={{ overflowX: 'auto', borderRadius: 20, border: `1px solid ${TOKENS.border}` }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
               <thead>
-                <tr style={{ textAlign: 'left', background: '#f8fafc' }}>
-                  {['Cycle', 'Electricity', 'Water', 'Base Rent', 'Total Due', 'Status'].map(h => <th key={h} style={{ padding: '16px 20px', fontSize: 11, fontWeight: 950, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>{h}</th>)}
+                <tr style={{ textAlign: 'left', background: TOKENS.bg }}>
+                  {['Cycle', 'Electricity', 'Water', 'Base Rent', 'Total Due', 'Status'].map(h => <th key={h} style={{ padding: '16px 20px', fontSize: 11, fontWeight: 950, color: TOKENS.slate, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {tenantDetailModal.bills.length === 0 ? <tr><td colSpan="6" style={{padding:40, textAlign:'center', color:'#94a3b8', fontWeight:700}}>No past financial activity.</td></tr> :
+                {tenantDetailModal.bills.length === 0 ? <tr><td colSpan="6" style={{padding:40, textAlign:'center', color: TOKENS.slate, fontWeight:700}}>No past financial activity.</td></tr> :
                  tenantDetailModal.bills.map(b => {
                   const energyUnits = b.curr_reading - b.prev_reading
                   let energyBill = energyUnits * b.rate_per_unit
                   if (energyBill > 0 && energyBill < 150) energyBill = 150
                   return (
-                    <tr key={b.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '16px 20px', fontWeight: 950, color: '#0f172a' }}>{b.billing_month}</td>
-                      <td style={{ padding: '16px 20px', fontWeight: 800, color: '#0f172a' }}>₹{energyBill.toLocaleString()} <span style={{fontSize:10, color:'#6366f1', fontWeight: 900}}>({energyUnits}u)</span></td>
-                      <td style={{ padding: '16px 20px', fontWeight: 800, color: '#0f172a' }}>₹{parseFloat(b.water_bill || 0).toLocaleString()}</td>
-                      <td style={{ padding: '16px 20px', fontWeight: 800, color: '#0f172a' }}>₹{parseFloat(b.fixed_rent || 0).toLocaleString()}</td>
-                      <td style={{ padding: '16px 20px', fontWeight: 950, color:'#6366f1', fontSize: 15 }}>₹{b.total_amount.toLocaleString()}</td>
+                    <tr key={b.id} style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
+                      <td style={{ padding: '16px 20px', fontWeight: 950, color: TOKENS.dark }}>{b.billing_month}</td>
+                      <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{energyBill.toLocaleString()} <span style={{fontSize:10, color: TOKENS.primary, fontWeight: 900}}>({energyUnits}u)</span></td>
+                      <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{parseFloat(b.water_bill || 0).toLocaleString()}</td>
+                      <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{parseFloat(b.fixed_rent || 0).toLocaleString()}</td>
+                      <td style={{ padding: '16px 20px', fontWeight: 950, color: TOKENS.primary, fontSize: 15 }}>₹{b.total_amount.toLocaleString()}</td>
                       <td style={{ padding: '16px 20px' }}>
                         <Badge label={tenantDetailModal.payments.find(p => p.due_date === b.due_date && Math.abs(Number(p.amount) - Number(b.total_amount)) < 1)?.status || 'Pending'} />
                       </td>
@@ -265,10 +262,10 @@ export default function Tenants() {
 
           <div style={sectionH}>Maintenance Requests</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {tenantDetailModal.maintenance.length === 0 ? <div style={{padding:40, textAlign:'center', color:'#94a3b8', fontWeight:700, background: '#f8fafc', borderRadius: 20}}>No maintenance history available.</div> :
+            {tenantDetailModal.maintenance.length === 0 ? <div style={{padding:40, textAlign:'center', color: TOKENS.slate, fontWeight:700, background: TOKENS.bg, borderRadius: 20}}>No maintenance history available.</div> :
              tenantDetailModal.maintenance.map(m => (
-              <div key={m.id} style={{ padding: '20px 24px', background: '#fff', border: '1px solid #f1f5f9', borderRadius: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                <div><div style={{fontWeight:900, fontSize:15, color:'#0f172a'}}>{m.issue}</div><div style={{fontSize:12, color:'#94a3b8', fontWeight:700, marginTop: 4}}>{new Date(m.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div></div>
+              <div key={m.id} style={{ padding: '20px 24px', background: '#fff', border: `1px solid ${TOKENS.border}`, borderRadius: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                <div><div style={{fontWeight:900, fontSize:15, color: TOKENS.dark}}>{m.issue}</div><div style={{fontSize:12, color: TOKENS.slate, fontWeight:700, marginTop: 4}}>{new Date(m.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div></div>
                 <Badge label={m.status} />
               </div>
             ))}
@@ -282,8 +279,8 @@ export default function Tenants() {
           {inp('Email Address', 'email', form, setForm, 'email')}
           {inp('Contact Phone', 'phone', form, setForm, 'tel')}
           <div style={{ marginBottom: 24 }}>
-            <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>ASSIGNED UNIT</label>
-            <select value={form.unit_id} onChange={e => setForm({ ...form, unit_id: e.target.value })} style={{ width: '100%', padding: '14px 16px', border: '2px solid #f1f5f9', borderRadius: 16, fontSize: 15, color: '#0f172a', fontWeight: 700, outline: 'none', transition: '0.2s' }} className="focus-indigo">
+            <label style={{ fontSize: 11, fontWeight: 900, color: TOKENS.slate, display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>SELECT ASSIGNED UNIT</label>
+            <select value={form.unit_id} onChange={e => setForm({ ...form, unit_id: e.target.value })} style={{ width: '100%', padding: '14px 16px', border: `2px solid ${TOKENS.border}`, borderRadius: 16, fontSize: 15, color: TOKENS.dark, fontWeight: 700, outline: 'none', transition: '0.2s' }} className="focus-indigo">
               <option value="">— Choose Available Unit —</option>
               {modal !== 'new' && tenants.find(t => t.id === modal.id)?.unit && (
                 <option value={tenants.find(t => t.id === modal.id).unit_id}>
@@ -298,13 +295,13 @@ export default function Tenants() {
             {inp('Security Deposit (₹)', 'deposit', form, setForm, 'number')}
           </div>
           <div style={{ marginBottom: 32 }}>
-            <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>LEASE AGREEMENT</label>
-            <div style={{ position: 'relative', background: '#f8fafc', padding: 20, borderRadius: 16, border: '2px dashed #e2e8f0', textAlign: 'center' }}>
+            <label style={{ fontSize: 11, fontWeight: 900, color: TOKENS.slate, display: 'block', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>LEASE AGREEMENT</label>
+            <div style={{ position: 'relative', background: TOKENS.bg, padding: 20, borderRadius: 16, border: '2px dashed #e2e8f0', textAlign: 'center' }}>
               <input type="file" accept=".pdf" onChange={e => setLeaseFile(e.target.files[0])} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
-              <div style={{ color: '#0f172a', fontWeight: 800, fontSize: 14 }}>{leaseFile ? leaseFile.name : 'Upload Signed Lease (PDF)'}</div>
+              <div style={{ color: TOKENS.dark, fontWeight: 800, fontSize: 14 }}>{leaseFile ? leaseFile.name : 'Upload Signed Lease (PDF)'}</div>
             </div>
           </div>
-          <button onClick={saveTenant} disabled={saving} style={{ width: '100%', padding: '18px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 18, fontSize: 16, fontWeight: 950, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)', transition: '0.2s' }} className="interactive-btn">
+          <button onClick={saveTenant} disabled={saving} style={{ width: '100%', padding: '18px', background: TOKENS.primary, color: '#fff', border: 'none', borderRadius: 18, fontSize: 16, fontWeight: 950, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)', transition: '0.2s' }} className="interactive-btn">
             {saving ? 'Processing...' : modal === 'new' ? 'Complete Onboarding' : 'Update Resident'}
           </button>
         </Modal>
@@ -312,10 +309,10 @@ export default function Tenants() {
 
       {releaseModal && (
         <Modal title="Resident Release Settlement" onClose={() => setReleaseModal(null)}>
-          <p style={{ fontSize: 15, color: '#64748b', lineHeight: 1.6, marginBottom: 28, fontWeight: 600 }}>Confirm release for <b>{releaseModal.name}</b>? This will free up Unit <b>{releaseModal.unit?.unit_number}</b> for new tenants.</p>
-          <div style={{ background: '#f8fafc', borderRadius: 24, padding: 28, marginBottom: 32, border: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 14, color: '#64748b', fontWeight: 700 }}><span>Initial Deposit</span><span style={{fontWeight:900, color:'#0f172a'}}>₹{releaseModal.deposit || 0}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 950, marginTop: 16, paddingTop: 16, borderTop: '2px dashed #e2e8f0', color: '#0f172a' }}><span>Settlement Refund</span><span style={{color:'#10b981'}}>₹{releaseModal.deposit || 0}</span></div>
+          <p style={{ fontSize: 15, color: TOKENS.slate, lineHeight: 1.6, marginBottom: 28, fontWeight: 600 }}>Confirm release for <b>{releaseModal.name}</b>? This will free up Unit <b>{releaseModal.unit?.unit_number}</b> for new tenants.</p>
+          <div style={{ background: TOKENS.bg, borderRadius: 24, padding: 28, marginBottom: 32, border: `1px solid ${TOKENS.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 14, color: TOKENS.slate, fontWeight: 700 }}><span>Initial Deposit</span><span style={{fontWeight:900, color: TOKENS.dark}}>₹{releaseModal.deposit || 0}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 950, marginTop: 16, paddingTop: 16, borderTop: '2px dashed #e2e8f0', color: TOKENS.dark }}><span>Settlement Refund</span><span style={{color:'#10b981'}}>₹{releaseModal.deposit || 0}</span></div>
           </div>
           <button onClick={handleRelease} disabled={saving} style={{ width: '100%', padding: '18px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 18, fontSize: 16, fontWeight: 950, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(220, 38, 38, 0.3)', transition: '0.2s' }} className="interactive-btn">Confirm Release & Refund</button>
         </Modal>
@@ -324,27 +321,22 @@ export default function Tenants() {
       <style>{`
         @media (max-width: 768px) {
           .main-wrapper { flex-direction: column !important; }
+          .tenants-container { padding: 20px 16px !important; }
+          .mobile-full-btn { max-width: none !important; width: 100% !important; margin-top: 12px; }
           .residents-grid { grid-template-columns: 1fr !important; }
+          .modal-container { padding: 20px 16px !important; border-radius: 20px !important; }
         }
         .premium-card:hover {
           transform: translateY(-6px);
           box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1) !important;
-          border-color: #6366f130 !important;
+          border-color: ${TOKENS.primary}30 !important;
         }
         .focus-indigo:focus {
-          border-color: #6366f1 !important;
+          border-color: ${TOKENS.primary} !important;
           box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1) !important;
         }
         .interactive-btn:active {
           transform: scale(0.96);
-        }
-        .skeleton-pulse {
-          animation: skeleton-animation 1.5s infinite linear;
-        }
-        @keyframes skeleton-animation {
-          0% { opacity: 0.5; }
-          50% { opacity: 1; }
-          100% { opacity: 0.5; }
         }
       `}</style>
     </div>
