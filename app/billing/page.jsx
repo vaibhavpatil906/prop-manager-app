@@ -1,0 +1,293 @@
+'use client'
+import { useState, useEffect, useMemo } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/lib/auth'
+import Sidebar, { TopBar } from '@/app/components/Sidebar'
+
+function InvoiceModal({ data, onClose }) {
+  const { user } = useAuth()
+  const [profile, setProfile] = useState(null)
+  
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+      if (p) setProfile(p)
+    }
+    fetchProfile()
+  }, [user])
+
+  const print = () => window.print()
+  const energyUnits = data.curr_reading - data.prev_reading
+  const displayMonth = data.billing_month ? new Date(data.billing_month + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'N/A'
+  
+  const msg = `Hi ${data.tenantName}, your bill for ${displayMonth} is generated.\n\n` +
+              `Business: ${profile?.business_name || 'PropManager'}\n` +
+              `Fixed Rent: $${parseFloat(data.fixed_rent).toLocaleString()}\n` +
+              `Light Bill: $${(energyUnits * data.rate_per_unit).toLocaleString()} (${energyUnits} units)\n` +
+              `Water Bill: $${parseFloat(data.water_bill || 0).toLocaleString()}\n` +
+              `Other: $${parseFloat(data.other_utilities || 0).toLocaleString()}\n\n` +
+              `*Total Due: $${parseFloat(data.total_amount || data.total).toLocaleString()}*\n` +
+              `Due Date: ${new Date(data.due_date).toLocaleDateString()}\n\nPlease pay at your earliest. Thank you!`
+
+  const sendWhatsApp = () => {
+    const phone = data.tenantPhone?.replace(/\D/g, '')
+    if (!phone) return alert('No phone number found for this tenant.')
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
+  }
+
+  const sendEmail = () => {
+    if (!data.tenantEmail) return alert('No email found for this tenant.')
+    window.open(`mailto:${data.tenantEmail}?subject=Invoice for ${displayMonth}&body=${encodeURIComponent(msg)}`, '_blank')
+  }
+
+  return (
+    <div className="no-print" style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
+        <div id="printable-invoice" style={{ padding: 24, background: '#fff', color: '#1a1a2e' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, borderBottom: '1px solid #f1f5f9', paddingBottom: 16 }}>
+            <div style={{ flex: 1 }}>
+              {profile?.business_logo && <img src={profile.business_logo} style={{ height: 32, marginBottom: 8, borderRadius: 6 }} />}
+              <div style={{ fontSize: 16, fontWeight: 900, color: '#1a1a2e' }}>{profile?.business_name || 'PropManager'}</div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 2, lineHeight: 1.3 }}>{profile?.business_address}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#6366f1' }}>INVOICE</div>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>{displayMonth}</div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Billed To:</div>
+            <div style={{ fontSize: 14, fontWeight: 800 }}>{data.tenantName}</div>
+            <div style={{ fontSize: 12, color: '#555' }}>{data.unitDetails}</div>
+          </div>
+
+          <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginBottom: 20 }}>
+            {[
+              ['Fixed Rent', parseFloat(data.fixed_rent)],
+              [`Light (${energyUnits} units)`, energyUnits * data.rate_per_unit],
+              ['Water Bill', parseFloat(data.water_bill || 0)],
+              ['Other Utilities', parseFloat(data.other_utilities || 0)]
+            ].map(([label, val]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}>
+                <div style={{ fontWeight: 600 }}>{label}</div>
+                <div style={{ fontWeight: 700 }}>${val.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background: '#1a1a2e', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.8 }}>Total Due</div>
+            <div style={{ fontSize: 20, fontWeight: 900 }}>${parseFloat(data.total_amount || data.total).toLocaleString()}</div>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: 8 }} className="no-print">
+          <button onClick={print} style={{ flex: 1, padding: '10px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>Print</button>
+          <button onClick={sendWhatsApp} style={{ flex: 1, padding: '10px', background: '#25D366', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>WhatsApp</button>
+          <button onClick={sendEmail} style={{ flex: 1, padding: '10px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>Email</button>
+          <button onClick={onClose} style={{ width: '100%', padding: '10px', background: '#fff', color: '#555', border: '1px solid #e2e8f0', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function Billing() {
+  const { user } = useAuth()
+  const [tenants, setTenants] = useState([])
+  const [history, setHistory] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [showInvoice, setShowInvoice] = useState(null)
+  const [view, setView] = useState('individual')
+  
+  const lastMonthDate = new Date(); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1)
+  const defaultMonth = lastMonthDate.toISOString().slice(0, 7)
+
+  const [form, setForm] = useState({
+    tenant_id: '', prev_reading: '', curr_reading: '', rate_per_unit: '10',
+    water_bill: '0', fixed_rent: 0, other_utilities: '0',
+    due_date: new Date().toISOString().split('T')[0],
+    billing_month: defaultMonth
+  })
+
+  const [bulkInputs, setBulkInputs] = useState({})
+
+  useEffect(() => { if (user?.id) { fetchTenants(); fetchHistory() } }, [user])
+
+  const fetchTenants = async () => {
+    const { data } = await supabase.from('tenants').select('id, name, email, phone, rent, unit:units(unit_number, property:properties(name))').eq('user_id', user.id).eq('status', 'Active')
+    setTenants(data || [])
+  }
+
+  const fetchHistory = async () => {
+    setLoading(true)
+    const { data } = await supabase.from('utility_bills').select('*, tenant:tenants(name, email, phone, unit:units(unit_number, property:properties(name)))').eq('user_id', user.id).order('created_at', { ascending: false })
+    setHistory(data || [])
+    setLoading(false)
+  }
+
+  const bulkData = useMemo(() => {
+    return tenants
+      .filter(t => !history.some(h => h.tenant_id === t.id && h.billing_month === form.billing_month))
+      .map(t => {
+        const lastBill = history.find(h => h.tenant_id === t.id)
+        const inputs = bulkInputs[t.id] || {}
+        return {
+          tenant_id: t.id, name: t.name, email: t.email, phone: t.phone, unit: t.unit, fixed_rent: t.rent || 0,
+          prev_reading: lastBill ? lastBill.curr_reading : 0,
+          curr_reading: inputs.curr || '', water_bill: inputs.water || '0', other_utilities: inputs.other || '0'
+        }
+      })
+  }, [tenants, history, form.billing_month, bulkInputs])
+
+  const handleBulkChange = (tid, field, val) => {
+    setBulkInputs(prev => ({ ...prev, [tid]: { ...prev[tid], [field]: val } }))
+  }
+
+  const handleTenantChange = (tid) => {
+    const tenant = tenants.find(t => t.id === tid)
+    const lastBill = history.find(h => h.tenant_id === tid)
+    setForm({ ...form, tenant_id: tid, fixed_rent: tenant?.rent || 0, prev_reading: lastBill ? lastBill.curr_reading : '', water_bill: lastBill ? lastBill.water_bill : '0' })
+  }
+
+  const calculateRowTotal = (row) => {
+    const energyUnits = Math.max(0, (parseFloat(row.curr_reading) || 0) - (parseFloat(row.prev_reading) || 0))
+    let energyBill = energyUnits * (parseFloat(form.rate_per_unit) || 10)
+    if (energyBill > 0 && energyBill < 150) energyBill = 150
+    return (parseFloat(row.fixed_rent) || 0) + energyBill + (parseFloat(row.water_bill) || 0) + (parseFloat(row.other_utilities) || 0)
+  }
+
+  const generateSingleBill = async (row) => {
+    if (!row.curr_reading) return alert('Enter current reading')
+    setSaving(true)
+    const total = calculateRowTotal(row)
+    try {
+      const { error: billErr } = await supabase.from('utility_bills').insert([{
+        user_id: user.id, tenant_id: row.tenant_id, prev_reading: parseFloat(row.prev_reading || 0),
+        curr_reading: parseFloat(row.curr_reading), rate_per_unit: parseFloat(form.rate_per_unit),
+        water_bill: parseFloat(row.water_bill || 0), fixed_rent: parseFloat(row.fixed_rent),
+        other_utilities: parseFloat(row.other_utilities), total_amount: total, due_date: form.due_date,
+        billing_month: form.billing_month
+      }])
+      if (billErr) throw billErr
+      await supabase.from('payments').insert([{ tenant_id: row.tenant_id, amount: total, due_date: form.due_date, status: 'Pending', method: 'Utility Bill' }])
+      fetchHistory()
+    } catch (err) { alert(err.message) }
+    setSaving(false)
+  }
+
+  const deleteBill = async (id) => {
+    if (!confirm('Delete record?')) return
+    await supabase.from('utility_bills').delete().eq('id', id)
+    fetchHistory()
+  }
+
+  const labelS = { fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 6, textTransform: 'uppercase' }
+  const inputS = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }
+
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>Loading...</div>
+
+  return (
+    <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
+      <Sidebar active="Billing" open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <TopBar onMenuClick={() => setSidebarOpen(true)} />
+        
+        <div style={{ padding: '24px 16px', maxWidth: 1200, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
+            <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0 }}>Billing</h2>
+            <div style={{ background: '#eee', padding: 4, borderRadius: 12, display: 'flex', width: 'fit-content' }}>
+              {['individual', 'bulk'].map(v => (
+                <button key={v} onClick={() => setView(v)} style={{ padding: '8px 16px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, background: view === v ? '#fff' : 'transparent', color: view === v ? '#1a1a2e' : '#888' }}>
+                  {v.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16 }}>
+              <div><label style={labelS}>Month</label><input type="month" value={form.billing_month} onChange={e => setForm({...form, billing_month: e.target.value})} style={{...inputS, border: '1px solid #6366f1', fontWeight: 700}} /></div>
+              <div><label style={labelS}>Rate/Unit</label><input type="number" value={form.rate_per_unit} onChange={e => setForm({...form, rate_per_unit: e.target.value})} style={inputS} /></div>
+              <div><label style={labelS}>Due Date</label><input type="date" value={form.due_date} onChange={e => setForm({...form, due_date: e.target.value})} style={inputS} /></div>
+            </div>
+          </div>
+
+          {view === 'bulk' ? (
+            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', background: '#f9fafb' }}>
+                      {['Tenant', 'Prev', 'Curr', 'Water', 'Total', ''].map(h => <th key={h} style={{ padding: '12px 16px', fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkData.map((row) => (
+                      <tr key={row.tenant_id} style={{ borderTop: '1px solid #f8fafc' }}>
+                        <td style={{ padding: '12px 16px' }}><div style={{ fontWeight: 700, fontSize: 14 }}>{row.name}</div><div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>Unit {row.unit?.unit_number}</div></td>
+                        <td style={{ padding: '12px 16px' }}><div style={{...inputS, background: '#f8fafc', width: 80}}>{row.prev_reading}</div></td>
+                        <td style={{ padding: '12px 16px' }}><input type="number" value={row.curr_reading} onChange={e => handleBulkChange(row.tenant_id, 'curr', e.target.value)} style={{ ...inputS, width: 80, border: !row.curr_reading ? '1px solid #fbbf24' : '1px solid #e5e7eb' }} /></td>
+                        <td style={{ padding: '12px 16px' }}><input type="number" value={row.water_bill} onChange={e => handleBulkChange(row.tenant_id, 'water', e.target.value)} style={{...inputS, width: 80}} /></td>
+                        <td style={{ padding: '12px 16px' }}><div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>${calculateRowTotal(row).toLocaleString()}</div></td>
+                        <td style={{ padding: '12px 16px' }}><button onClick={() => generateSingleBill(row)} disabled={saving} style={{ padding: '8px 12px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Generate</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="billing-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
+              <div style={{ background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #f1f5f9' }}>
+                <label style={labelS}>Resident</label>
+                <select value={form.tenant_id} onChange={e => handleTenantChange(e.target.value)} style={{...inputS, marginBottom: 16}}>
+                  <option value="">— Select —</option>
+                  {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                  <div><label style={labelS}>Prev Light</label><input type="number" value={form.prev_reading} onChange={e => setForm({...form, prev_reading: e.target.value})} style={inputS} /></div>
+                  <div><label style={labelS}>Curr Light</label><input type="number" value={form.curr_reading} onChange={e => setForm({...form, curr_reading: e.target.value})} style={inputS} /></div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                  <div><label style={labelS}>Water ($)</label><input type="number" value={form.water_bill} onChange={e => setForm({...form, water_bill: e.target.value})} style={inputS} /></div>
+                  <div><label style={labelS}>Other ($)</label><input type="number" value={form.other_utilities} onChange={e => setForm({...form, other_utilities: e.target.value})} style={inputS} /></div>
+                </div>
+                <div style={{ background: '#1a1a2e', borderRadius: 14, padding: 16, marginBottom: 16, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Total Due</span>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: '#818cf8' }}>${calculateRowTotal(form).toLocaleString()}</span>
+                </div>
+                <button onClick={() => generateSingleBill(form)} disabled={saving || !form.tenant_id} style={{ width: '100%', padding: '14px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer' }}>Generate Bill</button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {history.map(h => (
+                  <div key={h.id} style={{ background: '#fff', borderRadius: 16, padding: 16, border: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{h.tenant?.name}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, fontWeight: 600 }}>{h.billing_month} · ${h.total_amount.toLocaleString()}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setShowInvoice({...h, tenantName: h.tenant.name, tenantEmail: h.tenant.email, tenantPhone: h.tenant.phone, unitDetails: `${h.tenant.unit?.property?.name} - Unit ${h.tenant.unit?.unit_number}`})} style={{ background: '#f0f9ff', color: '#075985', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Invoice</button>
+                      <button onClick={() => deleteBill(h.id)} style={{ background: '#fff1f2', color: '#be123c', border: 'none', borderRadius: 8, padding: '8px', fontSize: 11, cursor: 'pointer' }}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      {showInvoice && <InvoiceModal data={showInvoice} onClose={() => setShowInvoice(null)} />}
+      <style>{`
+        @media (max-width: 768px) {
+          .main-wrapper { flex-direction: column !important; }
+          .billing-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </div>
+  )
+}
