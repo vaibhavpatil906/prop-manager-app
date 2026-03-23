@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import Sidebar, { TopBar } from '@/app/components/Sidebar'
@@ -33,6 +33,53 @@ function Badge({ label }) {
   )
 }
 
+function PaymentAccordion({ month, items, onPay, onDelete }) {
+  const [open, setOpen] = useState(true)
+  const displayMonth = new Date(month + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const totalPaid = items.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount), 0)
+  const totalPending = items.filter(i => i.status !== 'Paid').reduce((s, i) => s + Number(i.amount), 0)
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f1f5f9', overflow: 'hidden', marginBottom: 16 }}>
+      <div 
+        onClick={() => setOpen(!open)}
+        style={{ padding: '16px 20px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+        <div>
+          <span style={{ fontWeight: 950, color: '#000', fontSize: 14 }}>{displayMonth}</span>
+          <span style={{ marginLeft: 12, fontSize: 12, color: '#059669', fontWeight: 900 }}>Paid: ${totalPaid.toLocaleString()}</span>
+          {totalPending > 0 && <span style={{ marginLeft: 12, fontSize: 12, color: '#dc2626', fontWeight: 900 }}>Pending: ${totalPending.toLocaleString()}</span>}
+        </div>
+        <span style={{ fontSize: 12, color: '#000', transform: open ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>▼</span>
+      </div>
+      {open && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16, padding: 16 }}>
+          {items.map(p => (
+            <div key={p.id} style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ fontWeight: 950, color: '#000', fontSize: 15 }}>{p.tenant?.name || '—'}</div>
+                <Badge label={p.status} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '16px 0', borderTop: '1px solid #f0f0f0' }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 900, color: '#000', textTransform: 'uppercase' }}>Due Date</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#000', marginTop: 2 }}>{p.due_date || '—'}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 24, fontWeight: 950, color: '#000' }}>${Number(p.amount).toLocaleString()}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                {p.status !== 'Paid' && <button onClick={() => onPay(p.id)} style={{ flex: 1, padding: '10px', background: '#ecfdf5', color: '#059669', border: '1px solid #ecfdf5', borderRadius: 10, fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>Mark Paid</button>}
+                <button onClick={() => onDelete(p.id)} style={{ padding: '10px 12px', background: '#fff1f2', color: '#be123c', border: '1px solid #f1f5f9', borderRadius: 10, fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Payments() {
   const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -47,7 +94,7 @@ export default function Payments() {
   const fetchAll = async () => {
     setLoading(true)
     const [{ data: p }, { data: t }] = await Promise.all([
-      supabase.from('payments').select('*, tenant:tenants(name)').order('created_at', { ascending: false }),
+      supabase.from('payments').select('*, tenant:tenants(name)').order('due_date', { ascending: false }),
       supabase.from('tenants').select('id, name').eq('user_id', user.id),
     ])
     setPayments(p || [])
@@ -56,6 +103,17 @@ export default function Payments() {
   }
 
   useEffect(() => { if (user?.id) fetchAll() }, [user])
+
+  const groupedPayments = useMemo(() => {
+    const filtered = filter === 'All' ? payments : payments.filter(p => p.status === filter)
+    const groups = {}
+    filtered.forEach(p => {
+      const month = p.due_date ? p.due_date.slice(0, 7) : 'N/A'
+      if (!groups[month]) groups[month] = []
+      groups[month].push(p)
+    })
+    return Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(month => ({ month, items: groups[month] }))
+  }, [payments, filter])
 
   const savePayment = async () => {
     if (!form.tenant_id || !form.amount) return
@@ -80,7 +138,6 @@ export default function Payments() {
     fetchAll()
   }
 
-  const filtered = filter === 'All' ? payments : payments.filter(p => p.status === filter)
   const totalCollected = payments.filter(p => p.status === 'Paid').reduce((a, b) => a + Number(b.amount), 0)
   const totalOutstanding = payments.filter(p => p.status !== 'Paid').reduce((a, b) => a + Number(b.amount), 0)
 
@@ -124,7 +181,7 @@ export default function Payments() {
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
               {['All', 'Paid', 'Pending', 'Overdue'].map(s => (
                 <button key={s} onClick={() => setFilter(s)}
-                  style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 10, border: '1px solid #e2e8f0', background: filter === s ? '#000' : '#fff', color: filter === s ? '#fff' : '#000', fontWeight: 900, fontSize: 12, cursor: 'pointer' }}>
+                  style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 10, border: '1px solid #000', background: filter === s ? '#000' : '#fff', color: filter === s ? '#fff' : '#000', fontWeight: 900, fontSize: 12, cursor: 'pointer' }}>
                   {s}
                 </button>
               ))}
@@ -132,36 +189,35 @@ export default function Payments() {
           </div>
 
           {loading ? <div style={{textAlign:'center', padding:60, color:'#000', fontWeight: 800}}>Loading...</div> : (
-            <div className="payments-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-              {filtered.map(p => (
-                <div key={p.id} style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <div style={{ fontWeight: 900, color: '#000', fontSize: 15 }}>{p.tenant?.name || '—'}</div>
-                    <Badge label={p.status} />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '16px 0', borderTop: '1px solid #f1f5f9' }}>
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 900, color: '#000', textTransform: 'uppercase' }}>Due Date</div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#000', marginTop: 2 }}>{p.due_date || '—'}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 24, fontWeight: 950, color: '#000' }}>${Number(p.amount).toLocaleString()}</div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    {p.status !== 'Paid' && <button onClick={() => markPaid(p.id)} style={{ flex: 1, padding: '10px', background: '#ecfdf5', color: '#059669', border: '1px solid #ecfdf5', borderRadius: 10, fontSize: 12, fontWeight: 900 }}>Mark Paid</button>}
-                    <button onClick={() => deletePayment(p.id)} style={{ padding: '10px 12px', background: '#fff1f2', color: '#be123c', border: '1px solid #f1f5f9', borderRadius: 10, fontSize: 12, fontWeight: 900 }}>✕</button>
-                  </div>
-                </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {groupedPayments.length === 0 ? (
+                <div style={{textAlign:'center', padding:60, background:'#fff', borderRadius:20, color:'#000', fontWeight:700}}>No payment records found.</div>
+              ) : groupedPayments.map(group => (
+                <PaymentAccordion key={group.month} month={group.month} items={group.items} onPay={markPaid} onDelete={deletePayment} />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {modal && (
+        <Modal title={modal === 'new' ? 'Add Payment' : 'Edit Payment'} onClose={() => setModal(null)}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, fontWeight: 900, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>Resident</label>
+            <select value={form.tenant_id} onChange={e => setForm({...form, tenant_id: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, color: '#000', fontWeight: 700 }}>
+              <option value="">— Select —</option>
+              {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          {inp('Amount ($)', 'amount', 'number')}
+          {inp('Due Date', 'due_date', 'date')}
+          <button onClick={savePayment} disabled={saving} style={{ width: '100%', padding: '14px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 950, cursor: 'pointer', marginTop: 10 }}>Save Payment</button>
+        </Modal>
+      )}
+
       <style>{`
         @media (max-width: 768px) {
           .main-wrapper { flex-direction: column !important; }
-          .payments-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
