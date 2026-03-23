@@ -40,64 +40,52 @@ function InvoiceModal({ data, onClose }) {
               `_________________________\n\n` : '') +
               `_Please share screen shot/ref id after payment._`
 
-  const sendWhatsApp = () => {
-    const phone = data.tenantPhone?.replace(/\D/g, '')
-    if (!phone) return alert('No phone number found for this tenant.')
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
-  }
-
-  const sendEmail = () => {
-    if (!data.tenantEmail) return alert('No email found for this tenant.')
-    window.open(`mailto:${data.tenantEmail}?subject=Invoice for ${displayMonth}&body=${encodeURIComponent(msg)}`, '_blank')
-  }
-
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} className="modal-wrapper">
-      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 500, overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }} className="modal-content">
-        <div id="printable-invoice" style={{ padding: 24, background: '#fff', color: '#000' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, borderBottom: '1px solid #f1f5f9', paddingBottom: 16 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} className="modal-wrapper">
+      <div style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 500, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} className="modal-content">
+        <div id="printable-invoice" style={{ padding: 32, background: '#fff', color: '#0f172a' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, borderBottom: '2px solid #f1f5f9', paddingBottom: 24 }}>
             <div style={{ flex: 1 }}>
-              {profile?.business_logo && <img src={profile.business_logo} style={{ height: 32, marginBottom: 8, borderRadius: 6 }} />}
-              <div style={{ fontSize: 16, fontWeight: 950, color: '#000' }}>{profile?.business_name || 'PropManager'}</div>
-              <div style={{ fontSize: 11, color: '#000', marginTop: 2, lineHeight: 1.3, fontWeight: 700 }}>{profile?.business_address}</div>
+              {profile?.business_logo && <img src={profile.business_logo} style={{ height: 40, marginBottom: 12, borderRadius: 8 }} />}
+              <div style={{ fontSize: 18, fontWeight: 950, color: '#0f172a', letterSpacing: -0.5 }}>{profile?.business_name || 'PropManager'}</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.4, fontWeight: 700 }}>{profile?.business_address}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 18, fontWeight: 950, color: '#6366f1' }}>INVOICE</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: '#000' }}>{displayMonth}</div>
+              <div style={{ fontSize: 20, fontWeight: 950, color: '#6366f1', letterSpacing: 1 }}>INVOICE</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 4 }}>{displayMonth}</div>
             </div>
           </div>
 
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: '#000', textTransform: 'uppercase', marginBottom: 4 }}>Billed To:</div>
-            <div style={{ fontSize: 14, fontWeight: 950, color: '#000' }}>{data.tenantName}</div>
-            <div style={{ fontSize: 12, color: '#000', fontWeight: 700 }}>{data.unitDetails}</div>
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ fontSize: 10, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6, letterSpacing: 1 }}>BILLED TO</div>
+            <div style={{ fontSize: 16, fontWeight: 950, color: '#0f172a' }}>{data.tenantName}</div>
+            <div style={{ fontSize: 13, color: '#64748b', fontWeight: 700, marginTop: 2 }}>{data.unitDetails}</div>
           </div>
 
-          <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginBottom: 20 }}>
+          <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 24, marginBottom: 28 }}>
             {[
-              ['Fixed Rent', parseFloat(data.fixed_rent)],
-              [`Light (${energyUnits} units)`, energyUnits * data.rate_per_unit],
-              ['Water Bill', parseFloat(data.water_bill || 0)],
-              ['Other Utilities', parseFloat(data.other_utilities || 0)]
+              ['Fixed Base Rent', parseFloat(data.fixed_rent)],
+              [`Electricity (${energyUnits} units)`, energyBill],
+              ['Water Utility', parseFloat(data.water_bill || 0)],
+              ['Other Charges', parseFloat(data.other_utilities || 0)]
             ].map(([label, val]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}>
-                <div style={{ fontWeight: 800, color: '#000' }}>{label}</div>
-                <div style={{ fontWeight: 950, color: '#000' }}>₹{val.toLocaleString()}</div>
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 14 }}>
+                <div style={{ fontWeight: 700, color: '#64748b' }}>{label}</div>
+                <div style={{ fontWeight: 900, color: '#0f172a' }}>₹{val.toLocaleString()}</div>
               </div>
             ))}
           </div>
 
-          <div style={{ background: '#000', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff' }}>
-            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.9 }}>Total Due</div>
-            <div style={{ fontSize: 20, fontWeight: 950 }}>₹{parseFloat(data.total_amount || data.total).toLocaleString()}</div>
+          <div style={{ background: '#0f172a', borderRadius: 20, padding: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff' }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#94a3b8' }}>TOTAL PAYABLE</div>
+            <div style={{ fontSize: 24, fontWeight: 950, color: '#6366f1' }}>₹{parseFloat(data.total_amount || data.total).toLocaleString()}</div>
           </div>
         </div>
 
-        <div style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e5e7eb', display: 'flex', flexWrap: 'wrap', gap: 8 }} className="no-print">
-          <button onClick={print} style={{ flex: 1, padding: '10px', background: '#000', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 12 }}>Print</button>
-          <button onClick={sendWhatsApp} style={{ flex: 1, padding: '10px', background: '#25D366', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 12 }}>WhatsApp</button>
-          <button onClick={sendEmail} style={{ flex: 1, padding: '10px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 12 }}>Email</button>
-          <button onClick={onClose} style={{ width: '100%', padding: '10px', background: '#fff', color: '#000', border: '1px solid #e2e8f0', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 12 }}>Close</button>
+        <div style={{ padding: '24px 32px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: 12 }} className="no-print">
+          <button onClick={print} style={{ flex: 1, padding: '14px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 14, fontWeight: 900, cursor: 'pointer', fontSize: 13 }} className="interactive-btn">Print PDF</button>
+          <button onClick={() => window.open(`https://wa.me/${data.tenantPhone?.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank')} style={{ flex: 1, padding: '14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: 14, fontWeight: 900, cursor: 'pointer', fontSize: 13 }} className="interactive-btn">WhatsApp</button>
+          <button onClick={onClose} style={{ width: '100%', padding: '14px', background: '#fff', color: '#0f172a', border: '2px solid #f1f5f9', borderRadius: 14, fontWeight: 900, cursor: 'pointer', fontSize: 13 }} className="interactive-btn">Close Preview</button>
         </div>
       </div>
     </div>
@@ -110,34 +98,36 @@ function HistoryAccordion({ month, items, onEdit, onInvoice, onDelete, onPay }) 
   const totalMonth = items.reduce((sum, item) => sum + Number(item.total_amount), 0)
 
   return (
-    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f1f5f9', overflow: 'hidden', marginBottom: 12 }}>
+    <div style={{ background: '#fff', borderRadius: 24, border: '1px solid #f1f5f9', overflow: 'hidden', marginBottom: 16, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
       <div 
         onClick={() => setOpen(!open)}
-        style={{ padding: '16px 20px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+        style={{ padding: '20px 24px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderBottom: open ? '1px solid #f1f5f9' : 'none' }}>
         <div>
-          <span style={{ fontWeight: 950, color: '#000', fontSize: 14 }}>{displayMonth}</span>
-          <span style={{ marginLeft: 12, fontSize: 12, color: '#6366f1', fontWeight: 900 }}>₹{totalMonth.toLocaleString()}</span>
+          <span style={{ fontWeight: 950, color: '#0f172a', fontSize: 15, letterSpacing: -0.5 }}>{displayMonth}</span>
+          <span style={{ marginLeft: 16, fontSize: 12, color: '#6366f1', fontWeight: 900, background: '#6366f110', padding: '4px 12px', borderRadius: 10 }}>₹{totalMonth.toLocaleString()}</span>
         </div>
-        <span style={{ fontSize: 12, color: '#000', transform: open ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>▼</span>
+        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', transform: open ? 'rotate(180deg)' : 'none', transition: '0.3s' }}>
+          <svg style={{width:16,height:16, color: '#0f172a'}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"></path></svg>
+        </div>
       </div>
       {open && (
         <div style={{ padding: '8px 0' }}>
           {items.map(h => (
-            <div key={h.id} style={{ padding: '12px 20px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div key={h.id} style={{ padding: '16px 24px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="hover-row">
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 900, fontSize: 14, color: '#000' }}>{h.tenant?.name}</div>
-                <div style={{ fontSize: 11, color: '#000', marginTop: 4, fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center' }}>
-                  ₹{h.total_amount.toLocaleString()}
-                  <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontWeight: 950, background: h.payment_status === 'Paid' ? '#ecfdf5' : '#fff7ed', color: h.payment_status === 'Paid' ? '#059669' : '#d97706' }}>{h.payment_status.toUpperCase()}</span>
+                <div style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>{h.tenant?.name}</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 700, display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <span style={{color: '#0f172a', fontWeight: 900}}>₹{h.total_amount.toLocaleString()}</span>
+                  <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 9, fontWeight: 950, background: h.payment_status === 'Paid' ? '#ecfdf5' : '#fffbeb', color: h.payment_status === 'Paid' ? '#059669' : '#d97706', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h.payment_status}</span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
                 {h.payment_status !== 'Paid' && (
-                  <button onClick={() => onPay(h)} style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Pay</button>
+                  <button onClick={() => onPay(h)} style={{ background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: 10, padding: '10px 16px', fontSize: 11, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">Mark Paid</button>
                 )}
-                <button onClick={() => onEdit(h)} style={{ background: '#f8fafc', color: '#000', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Edit</button>
-                <button onClick={() => onInvoice(h)} style={{ background: '#f0f9ff', color: '#075985', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Invoice</button>
-                <button onClick={() => onDelete(h.id)} style={{ background: '#fff1f2', color: '#be123c', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>✕</button>
+                <button onClick={() => onInvoice(h)} style={{ background: '#f8fafc', color: '#0f172a', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 16px', fontSize: 11, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">Invoice</button>
+                <button onClick={() => onEdit(h)} style={{ background: '#fff', color: '#6366f1', border: '1px solid #6366f120', borderRadius: 10, padding: '10px', fontSize: 11, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">✎</button>
+                <button onClick={() => onDelete(h.id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 10, padding: '10px', fontSize: 11, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">✕</button>
               </div>
             </div>
           ))}
@@ -157,6 +147,7 @@ export default function Billing() {
   const [showInvoice, setShowInvoice] = useState(null)
   const [view, setView] = useState('individual')
   const [editingId, setEditingId] = useState(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   
   const lastMonthDate = new Date(); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1)
   const defaultMonth = lastMonthDate.toISOString().slice(0, 7)
@@ -262,6 +253,7 @@ export default function Billing() {
       }
 
       setEditingId(null)
+      setDrawerOpen(false)
       setForm({ ...form, tenant_id: '', curr_reading: '', water_bill: '0', other_utilities: '0', mark_paid: false })
       fetchHistory()
     } catch (err) { alert(err.message) }
@@ -277,6 +269,7 @@ export default function Billing() {
       other_utilities: h.other_utilities, due_date: h.due_date, billing_month: h.billing_month,
       mark_paid: h.payment_status === 'Paid'
     })
+    setDrawerOpen(true)
   }
 
   const updatePaymentStatus = async (bill) => {
@@ -297,10 +290,10 @@ export default function Billing() {
     fetchHistory()
   }
 
-  const labelS = { fontSize: 11, fontWeight: 900, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }
-  const inputS = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, boxSizing: 'border-box', color: '#000', fontWeight: 700 }
+  const labelS = { fontSize: 11, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }
+  const inputS = { width: '100%', padding: '14px 16px', borderRadius: 16, border: '2px solid #f1f5f9', fontSize: 15, boxSizing: 'border-box', color: '#0f172a', fontWeight: 700, outline: 'none', transition: '0.2s' }
 
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 800 }}>Loading...</div>
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a', fontWeight: 950 }}>Loading Billing Suite...</div>
 
   return (
     <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
@@ -308,226 +301,222 @@ export default function Billing() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }} className="content-container">
         <TopBar onMenuClick={() => setSidebarOpen(true)} />
         
-        <div style={{ padding: '20px 16px', maxWidth: 1200, width: '100%', boxSizing: 'border-box', margin: '0 auto' }} className="billing-ui-container">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }} className="no-print">
-            <h2 style={{ fontSize: 24, fontWeight: 950, color: '#000', margin: 0 }}>{editingId ? 'Edit Bill' : 'Billing'}</h2>
-            <div style={{ background: '#eee', padding: 4, borderRadius: 12, display: 'flex', width: 'fit-content', border: '1px solid #e2e8f0' }}>
-              {['individual', 'bulk', 'summary'].map(v => (
-                <button key={v} onClick={() => { setView(v); setEditingId(null); }} style={{ padding: '8px 16px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 900, background: view === v ? '#000' : 'transparent', color: view === v ? '#fff' : '#000' }}>
-                  {v.toUpperCase()}
+        <div style={{ padding: '32px 24px', maxWidth: 1200, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
+          
+          {/* Header Section */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }} className="no-print">
+            <div>
+              <h2 style={{ fontSize: 32, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: -1.5 }}>Billing Center</h2>
+              <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: 16, fontWeight: 600 }}>Invoice generation and monthly summary reports.</p>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div style={{ background: '#f1f5f9', padding: 6, borderRadius: 18, display: 'flex', gap: 4 }}>
+                {['individual', 'bulk', 'summary'].map(v => (
+                  <button key={v} onClick={() => { setView(v); setEditingId(null); }} 
+                    style={{ padding: '10px 24px', border: 'none', borderRadius: 14, cursor: 'pointer', fontSize: 12, fontWeight: 900, background: view === v ? '#6366f1' : 'transparent', color: view === v ? '#fff' : '#64748b', transition: '0.2s', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+              {view === 'individual' && (
+                <button onClick={() => { setEditingId(null); setForm({...form, tenant_id: ''}); setDrawerOpen(true); }}
+                  style={{ background: '#0f172a', color: '#fff', border: 'none', borderRadius: 16, padding: '14px 28px', fontWeight: 900, cursor: 'pointer', fontSize: 14, boxShadow: '0 10px 15px -3px rgba(15, 23, 42, 0.3)' }} className="interactive-btn">
+                  + Create Bill
                 </button>
-              ))}
+              )}
             </div>
           </div>
 
-          <div style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', marginBottom: 20 }} className="no-print">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16 }}>
-              <div><label style={labelS}>Month</label><input type="month" value={form.billing_month} onChange={e => setForm({...form, billing_month: e.target.value})} style={{...inputS, border: '2px solid #6366f1'}} /></div>
-              <div><label style={labelS}>Rate/Unit</label><input type="number" value={form.rate_per_unit} onChange={e => setForm({...form, rate_per_unit: e.target.value})} style={inputS} /></div>
-              <div><label style={labelS}>Due Date</label><input type="date" value={form.due_date} onChange={e => setForm({...form, due_date: e.target.value})} style={inputS} /></div>
-            </div>
+          {/* Config Strip */}
+          <div style={{ background: '#fff', borderRadius: 24, padding: '20px 28px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9', marginBottom: 32, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24 }} className="no-print">
+            <div><label style={labelS}>Billing Cycle</label><input type="month" value={form.billing_month} onChange={e => setForm({...form, billing_month: e.target.value})} style={{...inputS, border: 'none', background: '#f8fafc', padding: '10px 16px'}} /></div>
+            <div><label style={labelS}>Rate/Unit</label><input type="number" value={form.rate_per_unit} onChange={e => setForm({...form, rate_per_unit: e.target.value})} style={{...inputS, border: 'none', background: '#f8fafc', padding: '10px 16px'}} /></div>
+            <div><label style={labelS}>Due Date</label><input type="date" value={form.due_date} onChange={e => setForm({...form, due_date: e.target.value})} style={{...inputS, border: 'none', background: '#f8fafc', padding: '10px 16px'}} /></div>
           </div>
 
-          {view === 'summary' ? (
-            <div className="summary-report-container" style={{ background: '#fff', borderRadius: 20, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 950, color: '#000' }}>Summary Report: {new Date(form.billing_month + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h3>
-                <button onClick={() => window.print()} className="no-print" style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Print Report</button>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
-                  <thead>
-                    <tr style={{ textAlign: 'left', background: '#f9fafb' }}>
-                      {['Resident', 'Base Rent', 'Light Bill', 'Water Bill', 'Other', 'Total'].map(h => (
-                        <th key={h} style={{ padding: '14px 20px', fontSize: 11, color: '#000', textTransform: 'uppercase', fontWeight: 950, borderBottom: '2px solid #f1f5f9' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.filter(h => h.billing_month === form.billing_month).length === 0 ? (
-                      <tr><td colSpan="6" style={{ padding: 40, textAlign: 'center', color: '#000', fontWeight: 700 }}>No bills generated for this month yet.</td></tr>
-                    ) : history.filter(h => h.billing_month === form.billing_month).map(h => {
-                      const energyUnits = h.curr_reading - h.prev_reading
-                      let energyBill = energyUnits * h.rate_per_unit
-                      if (energyBill > 0 && energyBill < 150) energyBill = 150
-                      return (
-                        <tr key={h.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontWeight: 900, fontSize: 14, color: '#000' }}>{h.tenant?.name}</div>
-                            <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 700 }}>Unit {h.tenant?.unit?.unit_number}</div>
-                          </td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>₹{parseFloat(h.fixed_rent).toLocaleString()}</td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>₹{energyBill.toLocaleString()} <span style={{ fontSize: 10, color: '#94a3b8' }}>({energyUnits}u)</span></td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>₹{parseFloat(h.water_bill).toLocaleString()}</td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: '#000' }}>₹{parseFloat(h.other_utilities).toLocaleString()}</td>
-                          <td style={{ padding: '14px 20px', fontWeight: 950, color: '#6366f1', fontSize: 15 }}>₹{h.total_amount.toLocaleString()}</td>
+          {/* Main Content Area */}
+          <div style={{ position: 'relative' }}>
+            {view === 'summary' ? (
+              <div className="summary-report-container" style={{ background: '#fff', borderRadius: 32, border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.03)' }}>
+                <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 950, color: '#0f172a', letterSpacing: -0.5 }}>Monthly Summary: {new Date(form.billing_month + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h3>
+                  <button onClick={() => window.print()} className="no-print interactive-btn" style={{ background: '#0f172a', color: '#fff', border: 'none', borderRadius: 14, padding: '12px 24px', fontSize: 13, fontWeight: 900, cursor: 'pointer' }}>Print Report</button>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', background: '#f8fafc' }}>
+                        {['Resident', 'Rent', 'Light', 'Water', 'Other', 'Total'].map(h => (
+                          <th key={h} style={{ padding: '18px 24px', fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 950, letterSpacing: 1 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.filter(h => h.billing_month === form.billing_month).length === 0 ? (
+                        <tr><td colSpan="6" style={{ padding: 60, textAlign: 'center', color: '#94a3b8', fontWeight: 700 }}>No data available for this cycle.</td></tr>
+                      ) : history.filter(h => h.billing_month === form.billing_month).map(h => {
+                        const energyUnits = h.curr_reading - h.prev_reading
+                        let energyBill = energyUnits * h.rate_per_unit
+                        if (energyBill > 0 && energyBill < 150) energyBill = 150
+                        return (
+                          <tr key={h.id} style={{ borderBottom: '1px solid #f1f5f9' }} className="hover-row-indigo">
+                            <td style={{ padding: '18px 24px' }}>
+                              <div style={{ fontWeight: 950, fontSize: 15, color: '#0f172a' }}>{h.tenant?.name}</div>
+                              <div style={{ fontSize: 12, color: '#6366f1', fontWeight: 800, marginTop: 4 }}>Unit {h.tenant?.unit?.unit_number}</div>
+                            </td>
+                            <td style={{ padding: '18px 24px', fontWeight: 800, color: '#0f172a' }}>₹{parseFloat(h.fixed_rent).toLocaleString()}</td>
+                            <td style={{ padding: '18px 24px', fontWeight: 800, color: '#0f172a' }}>₹{energyBill.toLocaleString()}</td>
+                            <td style={{ padding: '18px 24px', fontWeight: 800, color: '#0f172a' }}>₹{parseFloat(h.water_bill).toLocaleString()}</td>
+                            <td style={{ padding: '18px 24px', fontWeight: 800, color: '#0f172a' }}>₹{parseFloat(h.other_utilities).toLocaleString()}</td>
+                            <td style={{ padding: '18px 24px', fontWeight: 950, color: '#6366f1', fontSize: 16 }}>₹{h.total_amount.toLocaleString()}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    {history.filter(h => h.billing_month === form.billing_month).length > 0 && (
+                      <tfoot style={{ background: '#0f172a' }}>
+                        <tr>
+                          <td style={{ padding: '24px', fontWeight: 950, color: '#94a3b8', fontSize: 12, textTransform: 'uppercase' }}>TOTALS</td>
+                          <td style={{ padding: '24px', fontWeight: 900, color: '#fff' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.fixed_rent), 0).toLocaleString()}</td>
+                          <td style={{ padding: '24px', fontWeight: 900, color: '#fff' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => {
+                            const u = x.curr_reading - x.prev_reading; 
+                            let b = u * x.rate_per_unit; 
+                            if (b > 0 && b < 150) b = 150; 
+                            return s + b;
+                          }, 0).toLocaleString()}</td>
+                          <td style={{ padding: '24px', fontWeight: 900, color: '#fff' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.water_bill), 0).toLocaleString()}</td>
+                          <td style={{ padding: '24px', fontWeight: 900, color: '#fff' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.other_utilities), 0).toLocaleString()}</td>
+                          <td style={{ padding: '24px', fontWeight: 950, color: '#6366f1', fontSize: 20 }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.total_amount), 0).toLocaleString()}</td>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                  {history.filter(h => h.billing_month === form.billing_month).length > 0 && (
-                    <tfoot style={{ background: '#f8fafc' }}>
-                      <tr>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>TOTALS</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.fixed_rent), 0).toLocaleString()}</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => {
-                          const u = x.curr_reading - x.prev_reading; 
-                          let b = u * x.rate_per_unit; 
-                          if (b > 0 && b < 150) b = 150; 
-                          return s + b;
-                        }, 0).toLocaleString()}</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.water_bill), 0).toLocaleString()}</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#000' }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.other_utilities), 0).toLocaleString()}</td>
-                        <td style={{ padding: '16px 20px', fontWeight: 950, color: '#6366f1', fontSize: 16 }}>₹{history.filter(h => h.billing_month === form.billing_month).reduce((s, x) => s + Number(x.total_amount), 0).toLocaleString()}</td>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            ) : view === 'bulk' ? (
+              <div style={{ background: '#fff', borderRadius: 32, border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.03)' }} className="no-print">
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', background: '#f8fafc' }}>
+                        {['Resident', 'Prev', 'Current', 'Water', 'Total', 'Paid', ''].map(h => <th key={h} style={{ padding: '18px 24px', fontSize: 10, color: '#64748b', textTransform: 'uppercase', fontWeight: 950, letterSpacing: 1 }}>{h}</th>)}
                       </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
-            </div>
-          ) : view === 'bulk' ? (
-            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #f1f5f9', overflow: 'hidden' }} className="no-print">
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
-                  <thead>
-                    <tr style={{ textAlign: 'left', background: '#f9fafb' }}>
-                      {['Tenant', 'Prev', 'Curr', 'Water', 'Total', 'Paid?', ''].map(h => <th key={h} style={{ padding: '12px 16px', fontSize: 10, color: '#000', textTransform: 'uppercase', fontWeight: 900 }}>{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bulkData.map((row) => (
-                      <tr key={row.tenant_id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '12px 16px' }}><div style={{ fontWeight: 950, fontSize: 14, color: '#000' }}>{row.name}</div><div style={{ fontSize: 11, color: '#6366f1', fontWeight: 800 }}>Unit {row.unit?.unit_number}</div></td>
-                        <td style={{ padding: '12px 16px' }}><div style={{...inputS, background: '#f8fafc', width: 70, border: '1px solid #f1f5f9'}}>{row.prev_reading}</div></td>
-                        <td style={{ padding: '12px 16px' }}><input type="number" value={row.curr_reading} onChange={e => handleBulkChange(row.tenant_id, 'curr', e.target.value)} style={{ ...inputS, width: 70, border: !row.curr_reading ? '2px solid #fbbf24' : '1px solid #e2e8f0' }} /></td>
-                        <td style={{ padding: '12px 16px' }}><input type="number" value={row.water_bill} onChange={e => handleBulkChange(row.tenant_id, 'water', e.target.value)} style={{...inputS, width: 70}} /></td>
-                        <td style={{ padding: '12px 16px' }}><div style={{ fontSize: 14, fontWeight: 950, color: '#000' }}>₹{calculateRowTotal(row).toLocaleString()}</div></td>
-                        <td style={{ padding: '12px 16px' }}><input type="checkbox" checked={row.mark_paid} onChange={e => handleBulkChange(row.tenant_id, 'mark_paid', e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} /></td>
-                        <td style={{ padding: '12px 16px' }}><button onClick={() => generateSingleBill(row)} disabled={saving} style={{ padding: '8px 12px', background: '#000', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>Generate</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="billing-grid no-print" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
-              <div style={{ background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #f1f5f9' }}>
-                <label style={labelS}>Resident</label>
-                <select value={form.tenant_id} onChange={e => handleTenantChange(e.target.value)} disabled={!!editingId} style={{...inputS, marginBottom: 16, background: editingId ? '#f8fafc' : '#fff'}}>
-                  <option value="">— Select —</option>
-                  {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-                  <div><label style={labelS}>Prev Light</label><input type="number" value={form.prev_reading} onChange={e => setForm({...form, prev_reading: e.target.value})} style={inputS} /></div>
-                  <div><label style={labelS}>Curr Light</label><input type="number" value={form.curr_reading} onChange={e => setForm({...form, curr_reading: e.target.value})} style={inputS} /></div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-                  <div><label style={labelS}>Water (₹)</label><input type="number" value={form.water_bill} onChange={e => setForm({...form, water_bill: e.target.value})} style={inputS} /></div>
-                  <div><label style={labelS}>Other (₹)</label><input type="number" value={form.other_utilities} onChange={e => setForm({...form, other_utilities: e.target.value})} style={inputS} /></div>
-                </div>
-                {!editingId && (
-                  <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input type="checkbox" id="mark_paid" checked={form.mark_paid} onChange={e => setForm({...form, mark_paid: e.target.checked})} style={{ width: 16, height: 16 }} />
-                    <label htmlFor="mark_paid" style={{ fontSize: 13, fontWeight: 800, color: '#000', cursor: 'pointer' }}>Mark as Paid immediately</label>
-                  </div>
-                )}
-                <div style={{ background: '#000', borderRadius: 14, padding: 16, marginBottom: 16, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, fontWeight: 800 }}>Total Due</span>
-                  <span style={{ fontSize: 18, fontWeight: 950, color: '#818cf8' }}>₹{calculateRowTotal(form).toLocaleString()}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => generateSingleBill(form)} disabled={saving || !form.tenant_id} style={{ flex: 2, padding: '14px', background: '#000', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 950, cursor: 'pointer' }}>{editingId ? 'Update Bill' : 'Generate Bill'}</button>
-                  {editingId && <button onClick={() => { setEditingId(null); setForm({...form, tenant_id: ''}); }} style={{ flex: 1, padding: '14px', background: '#f8fafc', color: '#000', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>}
+                    </thead>
+                    <tbody>
+                      {bulkData.map((row) => (
+                        <tr key={row.tenant_id} style={{ borderTop: '1px solid #f1f5f9' }} className="hover-row-indigo">
+                          <td style={{ padding: '18px 24px' }}><div style={{ fontWeight: 950, fontSize: 15, color: '#0f172a' }}>{row.name}</div><div style={{ fontSize: 12, color: '#6366f1', fontWeight: 800, marginTop: 2 }}>Unit {row.unit?.unit_number}</div></td>
+                          <td style={{ padding: '18px 24px' }}><div style={{ background: '#f8fafc', padding: '10px', borderRadius: 12, width: 80, textAlign: 'center', fontWeight: 800 }}>{row.prev_reading}</div></td>
+                          <td style={{ padding: '18px 24px' }}><input type="number" value={row.curr_reading} onChange={e => handleBulkChange(row.tenant_id, 'curr', e.target.value)} style={{ ...inputS, width: 100, marginBottom: 0, padding: '10px' }} className="focus-indigo" /></td>
+                          <td style={{ padding: '18px 24px' }}><input type="number" value={row.water_bill} onChange={e => handleBulkChange(row.tenant_id, 'water', e.target.value)} style={{...inputS, width: 90, marginBottom: 0, padding: '10px'}} className="focus-indigo" /></td>
+                          <td style={{ padding: '18px 24px' }}><div style={{ fontSize: 16, fontWeight: 950, color: '#0f172a' }}>₹{calculateRowTotal(row).toLocaleString()}</div></td>
+                          <td style={{ padding: '18px 24px', textAlign: 'center' }}><input type="checkbox" checked={row.mark_paid} onChange={e => handleBulkChange(row.tenant_id, 'mark_paid', e.target.checked)} style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#6366f1' }} /></td>
+                          <td style={{ padding: '18px 24px' }}><button onClick={() => generateSingleBill(row)} disabled={saving} style={{ padding: '12px 20px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 14, fontSize: 11, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">GENERATE</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {groupedHistory.map(group => (
                   <HistoryAccordion key={group.month} month={group.month} items={group.items} onPay={updatePaymentStatus} onEdit={editBill}
                     onInvoice={(h) => setShowInvoice({...h, tenantName: h.tenant.name, tenantEmail: h.tenant.email, tenantPhone: h.tenant.phone, unitDetails: `${h.tenant.unit?.property?.name} - Unit ${h.tenant.unit?.unit_number}`})}
                     onDelete={deleteBill} />
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Slide-out Drawer */}
+      {drawerOpen && (
+        <>
+          <div onClick={() => setDrawerOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 1001 }} />
+          <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: '100%', maxWidth: 420, background: '#fff', zIndex: 1002, boxShadow: '-20px 0 50px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', animation: 'slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+            <div style={{ padding: '32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 20, fontWeight: 950, color: '#0f172a', letterSpacing: -0.5 }}>{editingId ? 'Modify Invoice' : 'New Invoice'}</h3>
+                <p style={{ color: '#64748b', fontSize: 13, fontWeight: 600, marginTop: 4 }}>Cycle: {form.billing_month}</p>
+              </div>
+              <button onClick={() => setDrawerOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 12, width: 36, height: 32, cursor: 'pointer', color: '#0f172a', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+            
+            <div style={{ flex: 1, overflowY: 'auto', padding: '32px' }}>
+              <div style={{ marginBottom: 28 }}>
+                <label style={labelS}>SELECT RESIDENT</label>
+                <select value={form.tenant_id} onChange={e => handleTenantChange(e.target.value)} disabled={!!editingId} style={{...inputS, background: editingId ? '#f8fafc' : '#fff'}} className="focus-indigo">
+                  <option value="">— Choose Household —</option>
+                  {tenants.map(t => <option key={t.id} value={t.id}>{t.name} (Unit {t.unit?.unit_number})</option>)}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
+                <div><label style={labelS}>Previous Units</label><input type="number" value={form.prev_reading} onChange={e => setForm({...form, prev_reading: e.target.value})} style={inputS} className="focus-indigo" /></div>
+                <div><label style={labelS}>Current Units</label><input type="number" value={form.curr_reading} onChange={e => setForm({...form, curr_reading: e.target.value})} style={inputS} className="focus-indigo" /></div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
+                <div><label style={labelS}>Water (₹)</label><input type="number" value={form.water_bill} onChange={e => setForm({...form, water_bill: e.target.value})} style={inputS} className="focus-indigo" /></div>
+                <div><label style={labelS}>Other (₹)</label><input type="number" value={form.other_utilities} onChange={e => setForm({...form, other_utilities: e.target.value})} style={inputS} className="focus-indigo" /></div>
+              </div>
+
+              {!editingId && (
+                <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', gap: 12, background: '#f8fafc', padding: '16px', borderRadius: 16 }}>
+                  <input type="checkbox" id="mark_paid" checked={form.mark_paid} onChange={e => setForm({...form, mark_paid: e.target.checked})} style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#6366f1' }} />
+                  <label htmlFor="mark_paid" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', cursor: 'pointer' }}>Mark as Paid immediately</label>
+                </div>
+              )}
+
+              <div style={{ background: '#0f172a', borderRadius: 24, padding: 28, marginBottom: 32, color: '#fff', boxShadow: '0 15px 30px -10px rgba(15, 23, 42, 0.3)' }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Total Payable Amount</div>
+                <div style={{ fontSize: 36, fontWeight: 950, color: '#6366f1', letterSpacing: -1.5 }}>₹{calculateRowTotal(form).toLocaleString()}</div>
+              </div>
+            </div>
+
+            <div style={{ padding: '32px', borderTop: '1px solid #f1f5f9', background: '#f8fafc' }}>
+              <button onClick={() => generateSingleBill(form)} disabled={saving || !form.tenant_id} style={{ width: '100%', padding: '18px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 18, fontSize: 16, fontWeight: 950, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)' }} className="interactive-btn">
+                {saving ? 'Syncing...' : editingId ? 'Update Invoice' : 'Confirm & Generate Invoice'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {showInvoice && <InvoiceModal data={showInvoice} onClose={() => setShowInvoice(null)} />}
+      
       <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+        .hover-row-indigo:hover {
+          background: rgba(99, 102, 241, 0.03) !important;
+        }
+        .focus-indigo:focus {
+          border-color: #6366f1 !important;
+          box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1) !important;
+        }
+        .interactive-btn:active {
+          transform: scale(0.96);
+        }
         @media (max-width: 768px) {
           .main-wrapper { flex-direction: column !important; }
-          .billing-grid { grid-template-columns: 1fr !important; }
         }
         @media print {
-          @page { 
-            size: A4 portrait; 
-            margin: 15mm; 
-          }
-          *, *:before, *:after {
-            box-sizing: border-box !important;
-          }
-          html, body { 
-            background: #fff !important; 
-            width: 100% !important;
-            height: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .main-wrapper {
-            min-height: 0 !important;
-            height: auto !important;
-            display: block !important;
-          }
-          
-          /* Hide everything in the main UI explicitly */
-          .sidebar-container, .TopBar, .topbar-mobile, .no-print, .modal-wrapper button { 
-            display: none !important; 
-          }
-
-          /* If the modal is open, we only want the invoice. Hide the entire underlying page content */
-          body:has(.modal-wrapper) .content-container {
-            display: none !important;
-          }
-
-          /* Reset Modal container for printing */
-          .modal-wrapper { 
-            position: static !important;
-            display: block !important;
-            background: none !important;
-            padding: 0 !important;
-            width: 100% !important;
-          }
-          .modal-content {
-            width: 100% !important;
-            max-width: 100% !important;
-            box-shadow: none !important;
-            border: 1px solid #eee !important;
-            position: static !important;
-            margin: 0 !important;
-          }
-
-          /* Ensure Summary Report fills the page and scales properly */
-          .summary-report-container {
-            padding: 0 !important;
-            border: none !important;
-            width: 100% !important;
-            margin: 0 !important;
-          }
-          
-          .summary-report-container table {
-            width: 100% !important;
-            max-width: 100% !important;
-            min-width: 0 !important; 
-            font-size: 10pt !important;
-            table-layout: fixed !important;
-            word-wrap: break-word !important;
-          }
-
-          .summary-report-container th, .summary-report-container td {
-            padding: 6px 4px !important;
-            overflow: hidden !important;
-          }
+          @page { size: A4 portrait; margin: 15mm; }
+          *, *:before, *:after { box-sizing: border-box !important; }
+          html, body { background: #fff !important; width: 100% !important; height: auto !important; margin: 0 !important; padding: 0 !important; }
+          .main-wrapper { min-height: 0 !important; height: auto !important; display: block !important; }
+          .sidebar-container, .TopBar, .topbar-mobile, .no-print, .modal-wrapper button { display: none !important; }
+          body:has(.modal-wrapper) .content-container { display: none !important; }
+          .modal-wrapper { position: static !important; display: block !important; background: none !important; padding: 0 !important; width: 100% !important; }
+          .modal-content { width: 100% !important; max-width: 100% !important; box-shadow: none !important; border: 1px solid #eee !important; position: static !important; margin: 0 !important; }
+          .summary-report-container { padding: 0 !important; border: none !important; width: 100% !important; margin: 0 !important; }
+          .summary-report-container table { width: 100% !important; max-width: 100% !important; min-width: 0 !important; font-size: 10pt !important; table-layout: fixed !important; word-wrap: break-word !important; }
+          .summary-report-container th, .summary-report-container td { padding: 6px 4px !important; overflow: hidden !important; }
         }
       `}</style>
     </div>

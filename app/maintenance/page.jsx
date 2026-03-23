@@ -2,15 +2,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import Sidebar, { TopBar } from '@/app/components/Sidebar'
+import Sidebar, { TopBar, PageLoader } from '@/app/components/Sidebar'
 
-function Modal({ title, onClose, children, width = 500 }) {
+function Modal({ title, onClose, children, width = 520 }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 40px #0003' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#000' }}>{title}</h3>
-          <button onClick={onClose} style={{ background: '#f5f5f5', border: 'none', borderRadius: 12, width: 32, height: 32, cursor: 'pointer', fontSize: 16, color: '#000' }}>✕</button>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 28, padding: 32, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 950, color: '#0f172a', letterSpacing: -0.5 }}>{title}</h3>
+          <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: 12, width: 36, height: 32, cursor: 'pointer', fontSize: 18, color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="interactive-btn">✕</button>
         </div>
         {children}
       </div>
@@ -26,8 +26,8 @@ function Badge({ label }) {
   }
   const s = colors[label] || colors.Open
   return (
-    <span style={{ background: s.bg, color: s.color, padding: '4px 12px', borderRadius: 20, fontSize: 10, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 5, textTransform: 'uppercase' }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.dot }} />
+    <span style={{ background: s.bg, color: s.color, padding: '6px 14px', borderRadius: 20, fontSize: 10, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot }} />
       {label}
     </span>
   )
@@ -86,14 +86,14 @@ export default function Maintenance() {
   const filtered = filter === 'All' ? requests : requests.filter(r => r.status === filter)
 
   const inp = (label, key, type = 'text') => (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ fontSize: 11, fontWeight: 900, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>{label}</label>
+    <div style={{ marginBottom: 20 }}>
+      <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</label>
       <input type={type} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })}
-        style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', color: '#000', fontWeight: 700 }} />
+        style={{ width: '100%', padding: '14px 16px', border: '2px solid #f1f5f9', borderRadius: 16, fontSize: 15, boxSizing: 'border-box', color: '#0f172a', fontWeight: 700, transition: '0.2s', outline: 'none' }} className="focus-indigo" />
     </div>
   )
 
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 800 }}>Loading...</div>
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a', fontWeight: 950 }}>Loading Maintenance Module...</div>
 
   return (
     <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
@@ -101,42 +101,47 @@ export default function Maintenance() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar onMenuClick={() => setSidebarOpen(true)} />
         
-        <div style={{ padding: '24px 16px', maxWidth: 1100, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 32 }}>
+        <div style={{ padding: '32px 24px', maxWidth: 1200, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 32, marginBottom: 40 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: 24, fontWeight: 950, color: '#000', margin: 0 }}>Maintenance</h2>
+              <div>
+                <h2 style={{ fontSize: 32, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: -1.5 }}>Maintenance</h2>
+                <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: 16, fontWeight: 600 }}>Track and resolve property upkeep requests.</p>
+              </div>
               <button onClick={() => { setForm({ tenant_id: '', unit_id: '', issue: '', description: '', priority: 'Medium', status: 'Open' }); setModal('new') }} 
-                style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 24px', fontWeight: 900, cursor: 'pointer', fontSize: 13 }}>
-                + Add Issue
+                style={{ background: '#6366f1', color: '#fff', border: 'none', borderRadius: 16, padding: '14px 28px', fontWeight: 900, cursor: 'pointer', fontSize: 14, boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)', transition: '0.2s' }} className="interactive-btn">
+                + Report Issue
               </button>
             </div>
             
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
               {['All', 'Open', 'In Progress', 'Resolved'].map(s => (
                 <button key={s} onClick={() => setFilter(s)}
-                  style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 10, border: '1px solid #e2e8f0', background: filter === s ? '#000' : '#fff', color: filter === s ? '#fff' : '#000', fontWeight: 900, fontSize: 12, cursor: 'pointer' }}>
+                  style={{ whiteSpace: 'nowrap', padding: '10px 24px', borderRadius: 14, border: 'none', background: filter === s ? '#6366f1' : '#fff', color: filter === s ? '#fff' : '#64748b', fontWeight: 900, fontSize: 13, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', transition: '0.2s' }} className="interactive-btn">
                   {s}
                 </button>
               ))}
             </div>
           </div>
 
-          {loading ? <div style={{textAlign:'center', padding:60, color:'#000', fontWeight: 800}}>Loading...</div> : (
-            <div className="maintenance-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+          {loading ? (
+            <PageLoader message="Verifying Maintenance Logs..." />
+          ) : (
+            <div className="maintenance-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 20 }}>
               {filtered.map(r => (
-                <div key={r.id} style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                    <div style={{ fontWeight: 950, color: '#000', fontSize: 15, flex: 1, marginRight: 12 }}>{r.issue}</div>
+                <div key={r.id} style={{ background: '#fff', borderRadius: 28, padding: 28, border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', transition: 'all 0.2s' }} className="premium-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+                    <div style={{ fontWeight: 950, color: '#0f172a', fontSize: 16, flex: 1, marginRight: 16, letterSpacing: -0.5 }}>{r.issue}</div>
                     <Badge label={r.status} />
                   </div>
-                  {r.description && <p style={{ margin: '0 0 16px', fontSize: 13, color: '#000', lineHeight: 1.4, fontWeight: 600 }}>{r.description}</p>}
-                  <div style={{ fontSize: 12, color: '#000', fontWeight: 800, padding: '12px 0', borderTop: '1px solid #f1f5f9' }}>
-                    {r.tenant?.name || 'Unknown'} · Unit {r.unit?.unit_number}
+                  {r.description && <p style={{ margin: '0 0 24px', fontSize: 14, color: '#64748b', lineHeight: 1.6, fontWeight: 600 }}>{r.description}</p>}
+                  <div style={{ fontSize: 12, color: '#0f172a', fontWeight: 800, padding: '16px 0', borderTop: '1px solid #f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{color: '#6366f1'}}>📍</span> {r.tenant?.name || 'Unknown'} · Unit {r.unit?.unit_number}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    {r.status === 'Open' && <button onClick={() => updateStatus(r.id, 'In Progress')} style={{ flex: 1, padding: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #2563eb', borderRadius: 8, fontSize: 11, fontWeight: 900 }}>In Progress</button>}
-                    {r.status === 'In Progress' && <button onClick={() => updateStatus(r.id, 'Resolved')} style={{ flex: 1, padding: '8px', background: '#ecfdf5', color: '#059669', border: '1px solid #059669', borderRadius: 8, fontSize: 11, fontWeight: 900 }}>Resolved</button>}
-                    <button onClick={() => deleteRequest(r.id)} style={{ padding: '8px 12px', background: '#fff1f2', color: '#be123c', border: '1px solid #f1f5f9', borderRadius: 8, fontSize: 11, fontWeight: 900 }}>✕</button>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+                    {r.status === 'Open' && <button onClick={() => updateStatus(r.id, 'In Progress')} style={{ flex: 1, padding: '12px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: 14, fontSize: 12, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">In Progress</button>}
+                    {r.status === 'In Progress' && <button onClick={() => updateStatus(r.id, 'Resolved')} style={{ flex: 1, padding: '12px', background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: 14, fontSize: 12, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">Mark Resolved</button>}
+                    <button onClick={() => deleteRequest(r.id)} style={{ padding: '12px 16px', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 14, fontSize: 12, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">✕</button>
                   </div>
                 </div>
               ))}
@@ -144,11 +149,42 @@ export default function Maintenance() {
           )}
         </div>
       </div>
+
+      {modal && (
+        <Modal title={modal === 'new' ? 'Report New Issue' : 'Modify Request'} onClose={() => setModal(null)}>
+          <div style={{ marginBottom: 24 }}>
+            <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>ASSIGNED RESIDENT</label>
+            <select value={form.tenant_id} onChange={e => setForm({...form, tenant_id: e.target.value})} style={{ width: '100%', padding: '14px 16px', border: '2px solid #f1f5f9', borderRadius: 16, fontSize: 15, color: '#0f172a', fontWeight: 700, outline: 'none', transition: '0.2s' }} className="focus-indigo">
+              <option value="">— Select Household —</option>
+              {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          {inp('Issue Title', 'issue')}
+          <div style={{ marginBottom: 32 }}>
+            <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>DESCRIPTION</label>
+            <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Describe the problem..." style={{ width: '100%', padding: '14px 16px', border: '2px solid #f1f5f9', borderRadius: 16, fontSize: 15, color: '#0f172a', fontWeight: 700, height: 120, resize: 'none', outline: 'none', transition: '0.2s' }} className="focus-indigo" />
+          </div>
+          <button onClick={saveRequest} disabled={saving} style={{ width: '100%', padding: '18px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 18, fontSize: 16, fontWeight: 950, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(15, 23, 42, 0.3)', transition: '0.2s' }} className="interactive-btn">
+            {saving ? 'Processing...' : 'Submit Maintenance Request'}
+          </button>
+        </Modal>
+      )}
+
       <style>{`
         @media (max-width: 768px) {
           .main-wrapper { flex-direction: column !important; }
           .maintenance-grid { grid-template-columns: 1fr !important; }
         }
+        .premium-card:hover {
+          transform: translateY(-6px);
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1) !important;
+          border-color: #6366f130 !important;
+        }
+        .focus-indigo:focus {
+          border-color: #6366f1 !important;
+          box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1) !important;
+        }
+        .interactive-btn:active { transform: scale(0.96); }
       `}</style>
     </div>
   )

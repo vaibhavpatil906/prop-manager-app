@@ -12,17 +12,45 @@ const icons = {
   Settings: <svg style={{width:18,height:18}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
 }
 
+export function PageLoader({ message = "Syncing Data..." }) {
+  return (
+    <div style={{ padding: 100, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="loader-container" style={{ position: 'relative', width: 64, height: 64, marginBottom: 24 }}>
+        <div className="loader-ring" />
+        <div className="loader-ring-outer" />
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🏘️</div>
+      </div>
+      <div style={{ color: '#0f172a', fontWeight: 800, fontSize: 15, letterSpacing: 0.5, opacity: 0.8 }}>{message}</div>
+      <style>{`
+        .loader-ring {
+          position: absolute; inset: 0; border: 4px solid #f1f5f9; border-top-color: #6366f1; border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        .loader-ring-outer {
+          position: absolute; inset: -8px; border: 2px solid #6366f110; border-radius: 50%;
+          animation: pulse 2s infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse {
+          0% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.3); opacity: 0; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
 export function TopBar({ onMenuClick }) {
   return (
     <>
       <div className="topbar-mobile" style={{ 
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
-        padding: '12px 20px', background: '#1a1a2e', position: 'sticky', 
-        top: 0, zIndex: 50, boxShadow: '0 4px 12px #0002', color: '#fff' 
+        padding: '12px 20px', background: '#0f172a', position: 'sticky', 
+        top: 0, zIndex: 50, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', color: '#fff' 
       }}>
         <button onClick={onMenuClick} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>☰</button>
-        <div style={{ fontSize: 18, fontWeight: 950, letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{fontSize: 22}}>🏘️</span> PropManager
+        <div style={{ fontSize: 18, fontWeight: 950, letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 8, color: '#fff' }}>
+          <span style={{color: '#6366f1'}}>🏘️</span> PropManager
         </div>
         <div style={{ width: 32 }} />
       </div>
@@ -55,16 +83,16 @@ export default function Sidebar({ active, open, onClose }) {
         }} 
       />
       <div style={{
-        width: 240, background: '#1a1a2e', position: 'fixed', top: 0, 
-        left: open ? 0 : -240, bottom: 0, display: 'flex', flexDirection: 'column', 
+        width: 260, background: '#0f172a', position: 'fixed', top: 0, 
+        left: open ? 0 : -260, bottom: 0, display: 'flex', flexDirection: 'column', 
         padding: '40px 0', zIndex: 100, transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        borderRight: '1px solid #ffffff10', height: '100vh'
+        borderRight: '1px solid #ffffff08', height: '100vh'
       }} className="sidebar-container">
         <div style={{ padding: '0 28px 40px' }}>
           <div style={{ fontSize: 22, fontWeight: 950, color: '#fff', letterSpacing: -0.8, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{fontSize: 24}}>🏘️</span> PropManager
+            <span style={{color: '#6366f1', fontSize: 24}}>🏘️</span> PropManager
           </div>
-          <div style={{ fontSize: 11, color: '#ffffff40', marginTop: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, paddingLeft: 34 }}>Rental Management</div>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.5, paddingLeft: 34 }}>Professional Suite</div>
         </div>
         
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, padding: '0 12px' }}>
@@ -73,14 +101,16 @@ export default function Sidebar({ active, open, onClose }) {
             return (
               <button key={n} onClick={() => navigate('/' + n.toLowerCase())}
                 style={{ 
+                  position: 'relative',
                   display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 16px', background: isA ? '#6366f120' : 'transparent', 
-                  color: isA ? '#818cf8' : '#ffffff70', border: 'none', 
-                  borderRadius: 12, cursor: 'pointer', fontSize: 14, 
-                  fontWeight: isA ? 700 : 600, width: '100%', textAlign: 'left',
-                  transition: 'all 0.2s'
-                }}>
-                <span style={{ color: isA ? '#818cf8' : '#ffffff30' }}>{icons[n]}</span>
+                  padding: '14px 20px', background: isA ? 'rgba(99, 102, 241, 0.08)' : 'transparent', 
+                  color: isA ? '#fff' : '#94a3b8', border: 'none', 
+                  borderRadius: 14, cursor: 'pointer', fontSize: 14, 
+                  fontWeight: isA ? 800 : 600, width: '100%', textAlign: 'left',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                }} className="nav-btn">
+                {isA && <div style={{ position: 'absolute', left: -12, top: '20%', bottom: '20%', width: 4, background: '#6366f1', borderRadius: '0 4px 4px 0', boxShadow: '0 0 15px #6366f1' }} />}
+                <span style={{ color: isA ? '#6366f1' : '#475569', transition: '0.2s' }}>{icons[n]}</span>
                 {n}
               </button>
             )
@@ -88,16 +118,18 @@ export default function Sidebar({ active, open, onClose }) {
         </div>
 
         <div style={{ marginTop: 'auto', padding: '0 20px' }}>
-          <div style={{ background: '#ffffff05', borderRadius: 16, padding: 16, border: '1px solid #ffffff08' }}>
-            <div style={{ color: '#ffffff40', fontSize: 11, marginBottom: 10, fontWeight: 600, wordBreak: 'break-all' }}>Logged in as:<br/><span style={{color: '#ffffff80'}}>{user?.email}</span></div>
+          <div style={{ background: '#ffffff03', borderRadius: 24, padding: 20, border: '1px solid #ffffff08' }}>
+            <div style={{ color: '#ffffff40', fontSize: 10, marginBottom: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>ACTIVE OPERATOR</div>
+            <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, wordBreak: 'break-all', marginBottom: 16 }}>{user?.email}</div>
             <button onClick={signOut} style={{ 
-              background: '#ef444415', color: '#f87171', border: 'none', 
-              borderRadius: 10, padding: '10px', cursor: 'pointer', 
-              fontSize: 13, fontWeight: 700, width: '100%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
-            }}>
-              <svg style={{width:16,height:16}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-              Sign Out
+              background: '#334155', color: '#fff', border: 'none', 
+              borderRadius: 12, padding: '12px', cursor: 'pointer', 
+              fontSize: 13, fontWeight: 900, width: '100%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              transition: '0.2s'
+            }} className="logout-btn">
+              <svg style={{width:16,height:16}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+              Logout
             </button>
           </div>
         </div>
@@ -105,6 +137,15 @@ export default function Sidebar({ active, open, onClose }) {
           @media (min-width: 769px) {
             .sidebar-container { left: 0 !important; position: sticky !important; flex-shrink: 0 !important; }
             .sidebar-overlay { display: none !important; }
+          }
+          .nav-btn:hover:not(:disabled) {
+            background: rgba(255,255,255,0.03) !important;
+            color: #fff !important;
+            transform: translateX(4px);
+          }
+          .logout-btn:hover {
+            background: #ef4444 !important;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
           }
         `}</style>
       </div>

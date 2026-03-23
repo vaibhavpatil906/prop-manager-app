@@ -6,11 +6,11 @@ import Sidebar, { TopBar } from '@/app/components/Sidebar'
 
 function Modal({ title, onClose, children, width = 460 }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 24, padding: 32, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 40px #0003' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#000' }}>{title}</h3>
-          <button onClick={onClose} style={{ background: '#f5f5f5', border: 'none', borderRadius: 12, width: 32, height: 32, cursor: 'pointer', fontSize: 16, color: '#000' }}>✕</button>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 28, padding: 32, width: '100%', maxWidth: width, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 950, color: '#0f172a', letterSpacing: -0.5 }}>{title}</h3>
+          <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: 12, width: 36, height: 32, cursor: 'pointer', fontSize: 18, color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="interactive-btn">✕</button>
         </div>
         {children}
       </div>
@@ -24,10 +24,10 @@ function Badge({ label }) {
     Pending: { bg: '#fffbeb', color: '#d97706', dot: '#f59e0b' },
     Overdue: { bg: '#fef2f2', color: '#dc2626', dot: '#ef4444' },
   }
-  const s = colors[label] || { bg: '#f8fafc', color: '#000', dot: '#000' }
+  const s = colors[label] || { bg: '#f8fafc', color: '#0f172a', dot: '#0f172a' }
   return (
-    <span style={{ background: s.bg, color: s.color, padding: '4px 12px', borderRadius: 20, fontSize: 10, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 5, textTransform: 'uppercase' }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.dot }} />
+    <span style={{ background: s.bg, color: s.color, padding: '6px 14px', borderRadius: 20, fontSize: 10, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot }} />
       {label}
     </span>
   )
@@ -40,37 +40,41 @@ function PaymentAccordion({ month, items, onPay, onDelete }) {
   const totalPending = items.filter(i => i.status !== 'Paid').reduce((s, i) => s + Number(i.amount), 0)
 
   return (
-    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f1f5f9', overflow: 'hidden', marginBottom: 16 }}>
+    <div style={{ background: '#fff', borderRadius: 24, border: '1px solid #f1f5f9', overflow: 'hidden', marginBottom: 20, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
       <div 
         onClick={() => setOpen(!open)}
-        style={{ padding: '16px 20px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-        <div>
-          <span style={{ fontWeight: 950, color: '#000', fontSize: 14 }}>{displayMonth}</span>
-          <span style={{ marginLeft: 12, fontSize: 12, color: '#059669', fontWeight: 900 }}>Paid: ${totalPaid.toLocaleString()}</span>
-          {totalPending > 0 && <span style={{ marginLeft: 12, fontSize: 12, color: '#dc2626', fontWeight: 900 }}>Pending: ${totalPending.toLocaleString()}</span>}
+        style={{ padding: '20px 28px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderBottom: open ? '1px solid #f1f5f9' : 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <span style={{ fontWeight: 950, color: '#0f172a', fontSize: 16, letterSpacing: -0.5 }}>{displayMonth}</span>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <span style={{ fontSize: 12, color: '#059669', fontWeight: 900, background: '#ecfdf5', padding: '4px 12px', borderRadius: 10 }}>Paid: ₹{totalPaid.toLocaleString()}</span>
+            {totalPending > 0 && <span style={{ fontSize: 12, color: '#d97706', fontWeight: 900, background: '#fffbeb', padding: '4px 12px', borderRadius: 10 }}>Pending: ₹{totalPending.toLocaleString()}</span>}
+          </div>
         </div>
-        <span style={{ fontSize: 12, color: '#000', transform: open ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>▼</span>
+        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', transform: open ? 'rotate(180deg)' : 'none', transition: '0.3s' }}>
+          <svg style={{width:16,height:16, color: '#0f172a'}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"></path></svg>
+        </div>
       </div>
       {open && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16, padding: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 20, padding: 24 }}>
           {items.map(p => (
-            <div key={p.id} style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <div style={{ fontWeight: 950, color: '#000', fontSize: 15 }}>{p.tenant?.name || '—'}</div>
+            <div key={p.id} style={{ background: '#fff', borderRadius: 24, padding: 24, border: '1px solid #f1f5f9', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.03)', transition: 'all 0.2s' }} className="premium-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div style={{ fontWeight: 950, color: '#0f172a', fontSize: 16 }}>{p.tenant?.name || '—'}</div>
                 <Badge label={p.status} />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '16px 0', borderTop: '1px solid #f0f0f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '20px 0', borderTop: '1px solid #f1f5f9' }}>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 900, color: '#000', textTransform: 'uppercase' }}>Due Date</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#000', marginTop: 2 }}>{p.due_date || '—'}</div>
+                  <div style={{ fontSize: 10, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>Due Date</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 4 }}>{p.due_date || '—'}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 24, fontWeight: 950, color: '#000' }}>${Number(p.amount).toLocaleString()}</div>
+                  <div style={{ fontSize: 28, fontWeight: 950, color: '#0f172a', letterSpacing: -1 }}>₹{Number(p.amount).toLocaleString()}</div>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                {p.status !== 'Paid' && <button onClick={() => onPay(p.id)} style={{ flex: 1, padding: '10px', background: '#ecfdf5', color: '#059669', border: '1px solid #ecfdf5', borderRadius: 10, fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>Mark Paid</button>}
-                <button onClick={() => onDelete(p.id)} style={{ padding: '10px 12px', background: '#fff1f2', color: '#be123c', border: '1px solid #f1f5f9', borderRadius: 10, fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>✕</button>
+              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                {p.status !== 'Paid' && <button onClick={() => onPay(p.id)} style={{ flex: 1, padding: '12px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 14, fontSize: 12, fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }} className="interactive-btn">Mark Paid</button>}
+                <button onClick={() => onDelete(p.id)} style={{ padding: '12px 16px', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 14, fontSize: 12, fontWeight: 900, cursor: 'pointer' }} className="interactive-btn">✕</button>
               </div>
             </div>
           ))}
@@ -142,14 +146,14 @@ export default function Payments() {
   const totalOutstanding = payments.filter(p => p.status !== 'Paid').reduce((a, b) => a + Number(b.amount), 0)
 
   const inp = (label, key, type = 'text') => (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ fontSize: 11, fontWeight: 900, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>{label}</label>
+    <div style={{ marginBottom: 20 }}>
+      <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</label>
       <input type={type} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })}
-        style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', color: '#000', fontWeight: 700 }} />
+        style={{ width: '100%', padding: '14px 16px', border: '2px solid #f1f5f9', borderRadius: 16, fontSize: 15, boxSizing: 'border-box', color: '#0f172a', fontWeight: 700, transition: '0.2s', outline: 'none' }} className="focus-indigo" />
     </div>
   )
 
-  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 800 }}>Loading...</div>
+  if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a', fontWeight: 950 }}>Loading Ledger...</div>
 
   return (
     <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
@@ -157,41 +161,49 @@ export default function Payments() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar onMenuClick={() => setSidebarOpen(true)} />
         
-        <div style={{ padding: '24px 16px', maxWidth: 1100, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 32 }}>
+        <div style={{ padding: '32px 24px', maxWidth: 1200, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 32, marginBottom: 40 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: 24, fontWeight: 950, color: '#000', margin: 0 }}>Payments</h2>
+              <div>
+                <h2 style={{ fontSize: 32, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: -1.5 }}>Payments</h2>
+                <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: 16, fontWeight: 600 }}>Tracking your financial collections.</p>
+              </div>
               <button onClick={() => { setForm({ tenant_id: '', amount: '', due_date: '', paid_date: '', status: 'Pending', method: '' }); setModal('new') }} 
-                style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 24px', fontWeight: 900, cursor: 'pointer', fontSize: 13 }}>
-                + Add Payment
+                style={{ background: '#6366f1', color: '#fff', border: 'none', borderRadius: 16, padding: '14px 28px', fontWeight: 900, cursor: 'pointer', fontSize: 14, boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)', transition: '0.2s' }} className="interactive-btn">
+                + Record Payment
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ background: '#fff', padding: 16, borderRadius: 16, border: '1px solid #f1f5f9' }}>
-                <div style={{ fontSize: 10, fontWeight: 900, color: '#059669', textTransform: 'uppercase' }}>Collected</div>
-                <div style={{ fontSize: 20, fontWeight: 950, color: '#000', marginTop: 4 }}>${totalCollected.toLocaleString()}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20 }}>
+              <div style={{ background: '#fff', padding: 28, borderRadius: 28, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 11, fontWeight: 900, color: '#059669', textTransform: 'uppercase', letterSpacing: 1 }}>COLLECTED</div>
+                <div style={{ fontSize: 32, fontWeight: 950, color: '#0f172a', marginTop: 8, letterSpacing: -1 }}>₹{totalCollected.toLocaleString()}</div>
               </div>
-              <div style={{ background: '#fff', padding: 16, borderRadius: 16, border: '1px solid #f1f5f9' }}>
-                <div style={{ fontSize: 10, fontWeight: 900, color: '#dc2626', textTransform: 'uppercase' }}>Outstanding</div>
-                <div style={{ fontSize: 20, fontWeight: 950, color: '#000', marginTop: 4 }}>${totalOutstanding.toLocaleString()}</div>
+              <div style={{ background: '#fff', padding: 28, borderRadius: 28, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 11, fontWeight: 900, color: '#dc2626', textTransform: 'uppercase', letterSpacing: 1 }}>OUTSTANDING</div>
+                <div style={{ fontSize: 32, fontWeight: 950, color: '#0f172a', marginTop: 8, letterSpacing: -1 }}>₹{totalOutstanding.toLocaleString()}</div>
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
               {['All', 'Paid', 'Pending', 'Overdue'].map(s => (
                 <button key={s} onClick={() => setFilter(s)}
-                  style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: 10, border: '1px solid #000', background: filter === s ? '#000' : '#fff', color: filter === s ? '#fff' : '#000', fontWeight: 900, fontSize: 12, cursor: 'pointer' }}>
+                  style={{ whiteSpace: 'nowrap', padding: '10px 24px', borderRadius: 14, border: 'none', background: filter === s ? '#6366f1' : '#fff', color: filter === s ? '#fff' : '#64748b', fontWeight: 900, fontSize: 13, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', transition: '0.2s' }} className="interactive-btn">
                   {s}
                 </button>
               ))}
             </div>
           </div>
 
-          {loading ? <div style={{textAlign:'center', padding:60, color:'#000', fontWeight: 800}}>Loading...</div> : (
+          {loading ? (
+            <div style={{textAlign:'center', padding:100, color:'#0f172a', fontWeight: 800}}>
+              <div className="skeleton-pulse" style={{ width: 48, height: 48, background: '#e2e8f0', borderRadius: '50%', margin: '0 auto 20px' }} />
+              Verifying Ledger...
+            </div>
+          ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {groupedPayments.length === 0 ? (
-                <div style={{textAlign:'center', padding:60, background:'#fff', borderRadius:20, color:'#000', fontWeight:700}}>No payment records found.</div>
+                <div style={{textAlign:'center', padding:80, background:'#fff', borderRadius:32, color:'#64748b', fontWeight:700, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'}}>No payment history matches these filters.</div>
               ) : groupedPayments.map(group => (
                 <PaymentAccordion key={group.month} month={group.month} items={group.items} onPay={markPaid} onDelete={deletePayment} />
               ))}
@@ -201,23 +213,45 @@ export default function Payments() {
       </div>
 
       {modal && (
-        <Modal title={modal === 'new' ? 'Add Payment' : 'Edit Payment'} onClose={() => setModal(null)}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 11, fontWeight: 900, color: '#000', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>Resident</label>
-            <select value={form.tenant_id} onChange={e => setForm({...form, tenant_id: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 14, color: '#000', fontWeight: 700 }}>
-              <option value="">— Select —</option>
+        <Modal title={modal === 'new' ? 'Manual Payment Entry' : 'Update Payment Record'} onClose={() => setModal(null)}>
+          <div style={{ marginBottom: 24 }}>
+            <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>RESIDENT NAME</label>
+            <select value={form.tenant_id} onChange={e => setForm({...form, tenant_id: e.target.value})} style={{ width: '100%', padding: '14px 16px', border: '2px solid #f1f5f9', borderRadius: 16, fontSize: 15, color: '#0f172a', fontWeight: 700, outline: 'none', transition: '0.2s' }} className="focus-indigo">
+              <option value="">— Select Resident —</option>
               {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
-          {inp('Amount ($)', 'amount', 'number')}
-          {inp('Due Date', 'due_date', 'date')}
-          <button onClick={savePayment} disabled={saving} style={{ width: '100%', padding: '14px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 950, cursor: 'pointer', marginTop: 10 }}>Save Payment</button>
+          {inp('Transaction Amount (₹)', 'amount', 'number')}
+          {inp('Transaction Due Date', 'due_date', 'date')}
+          <button onClick={savePayment} disabled={saving} style={{ width: '100%', padding: '18px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 18, fontSize: 16, fontWeight: 950, cursor: 'pointer', marginTop: 12, boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)', transition: '0.2s' }} className="interactive-btn">
+            {saving ? 'Syncing...' : 'Confirm Payment Record'}
+          </button>
         </Modal>
       )}
 
       <style>{`
         @media (max-width: 768px) {
           .main-wrapper { flex-direction: column !important; }
+        }
+        .premium-card:hover {
+          transform: translateY(-6px);
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1) !important;
+          border-color: #6366f130 !important;
+        }
+        .focus-indigo:focus {
+          border-color: #6366f1 !important;
+          box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1) !important;
+        }
+        .interactive-btn:active {
+          transform: scale(0.96);
+        }
+        .skeleton-pulse {
+          animation: skeleton-animation 1.5s infinite linear;
+        }
+        @keyframes skeleton-animation {
+          0% { opacity: 0.5; }
+          50% { opacity: 1; }
+          100% { opacity: 0.5; }
         }
       `}</style>
     </div>
