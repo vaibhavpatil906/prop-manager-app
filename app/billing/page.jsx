@@ -52,8 +52,8 @@ function InvoiceModal({ data, onClose }) {
   }
 
   return (
-    <div className="no-print" style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} className="modal-wrapper">
+      <div style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 500, overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }} className="modal-content">
         <div id="printable-invoice" style={{ padding: 24, background: '#fff', color: '#000' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, borderBottom: '1px solid #f1f5f9', paddingBottom: 16 }}>
             <div style={{ flex: 1 }}>
@@ -305,11 +305,11 @@ export default function Billing() {
   return (
     <div className="main-wrapper" style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex' }}>
       <Sidebar active="Billing" open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }} className="content-container">
         <TopBar onMenuClick={() => setSidebarOpen(true)} />
         
-        <div style={{ padding: '20px 16px', maxWidth: 1200, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
+        <div style={{ padding: '20px 16px', maxWidth: 1200, width: '100%', boxSizing: 'border-box', margin: '0 auto' }} className="billing-ui-container">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }} className="no-print">
             <h2 style={{ fontSize: 24, fontWeight: 950, color: '#000', margin: 0 }}>{editingId ? 'Edit Bill' : 'Billing'}</h2>
             <div style={{ background: '#eee', padding: 4, borderRadius: 12, display: 'flex', width: 'fit-content', border: '1px solid #e2e8f0' }}>
               {['individual', 'bulk', 'summary'].map(v => (
@@ -320,7 +320,7 @@ export default function Billing() {
             </div>
           </div>
 
-          <div style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', marginBottom: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', marginBottom: 20 }} className="no-print">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16 }}>
               <div><label style={labelS}>Month</label><input type="month" value={form.billing_month} onChange={e => setForm({...form, billing_month: e.target.value})} style={{...inputS, border: '2px solid #6366f1'}} /></div>
               <div><label style={labelS}>Rate/Unit</label><input type="number" value={form.rate_per_unit} onChange={e => setForm({...form, rate_per_unit: e.target.value})} style={inputS} /></div>
@@ -329,7 +329,7 @@ export default function Billing() {
           </div>
 
           {view === 'summary' ? (
-            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
+            <div className="summary-report-container" style={{ background: '#fff', borderRadius: 20, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
               <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 950, color: '#000' }}>Summary Report: {new Date(form.billing_month + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h3>
                 <button onClick={() => window.print()} className="no-print" style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Print Report</button>
@@ -386,7 +386,7 @@ export default function Billing() {
               </div>
             </div>
           ) : view === 'bulk' ? (
-            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
+            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #f1f5f9', overflow: 'hidden' }} className="no-print">
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
                   <thead>
@@ -411,7 +411,7 @@ export default function Billing() {
               </div>
             </div>
           ) : (
-            <div className="billing-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
+            <div className="billing-grid no-print" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
               <div style={{ background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #f1f5f9' }}>
                 <label style={labelS}>Resident</label>
                 <select value={form.tenant_id} onChange={e => handleTenantChange(e.target.value)} disabled={!!editingId} style={{...inputS, marginBottom: 16, background: editingId ? '#f8fafc' : '#fff'}}>
@@ -458,6 +458,76 @@ export default function Billing() {
         @media (max-width: 768px) {
           .main-wrapper { flex-direction: column !important; }
           .billing-grid { grid-template-columns: 1fr !important; }
+        }
+        @media print {
+          @page { 
+            size: A4 portrait; 
+            margin: 15mm; 
+          }
+          *, *:before, *:after {
+            box-sizing: border-box !important;
+          }
+          html, body { 
+            background: #fff !important; 
+            width: 100% !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .main-wrapper {
+            min-height: 0 !important;
+            height: auto !important;
+            display: block !important;
+          }
+          
+          /* Hide everything in the main UI explicitly */
+          .sidebar-container, .TopBar, .topbar-mobile, .no-print, .modal-wrapper button { 
+            display: none !important; 
+          }
+
+          /* If the modal is open, we only want the invoice. Hide the entire underlying page content */
+          body:has(.modal-wrapper) .content-container {
+            display: none !important;
+          }
+
+          /* Reset Modal container for printing */
+          .modal-wrapper { 
+            position: static !important;
+            display: block !important;
+            background: none !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+          .modal-content {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-shadow: none !important;
+            border: 1px solid #eee !important;
+            position: static !important;
+            margin: 0 !important;
+          }
+
+          /* Ensure Summary Report fills the page and scales properly */
+          .summary-report-container {
+            padding: 0 !important;
+            border: none !important;
+            width: 100% !important;
+            margin: 0 !important;
+          }
+          
+          .summary-report-container table {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important; 
+            font-size: 10pt !important;
+            table-layout: fixed !important;
+            word-wrap: break-word !important;
+          }
+
+          .summary-report-container th, .summary-report-container td {
+            padding: 6px 4px !important;
+            overflow: hidden !important;
+          }
         }
       `}</style>
     </div>
