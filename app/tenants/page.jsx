@@ -37,35 +37,76 @@ export default function Tenants() {
   const { user } = useAuth()
   const [tenants, setTenants] = useState([])
   const [units, setUnits] = useState([])
+  const [leases, setLeases] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [releaseModal, setReleaseModal] = useState(null)
+  const [leasesModal, setLeasesModal] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [leaseFile, setLeaseFile] = useState(null)
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', unit_id: '', rent: '', deposit: '', status: 'Active' })
+  const [releaseForm, setReleaseForm] = useState({ deductions: '0', reason: 'Lease Ended' })
 
   const fetchAll = async () => {
     setLoading(true)
-    const [{ data: t }, { data: u }] = await Promise.all([
+    const [{ data: t }, { data: u }, { data: l }] = await Promise.all([
       supabase.from('tenants').select('*, unit:units(unit_number, property:properties(name))').eq('user_id', user.id).order('created_at', { ascending: false }),
       supabase.from('units').select('*, property:properties(name)'),
+      supabase.from('leases').select('*').order('created_at', { ascending: false }),
     ])
     setTenants(t || [])
     setUnits(u || [])
+    setLeases(l || [])
     setLoading(false)
   }
 
   useEffect(() => { if (user?.id) fetchAll() }, [user])
 
+  const openAdd = () => {
+    setForm({ name: '', email: '', phone: '', unit_id: '', rent: '', deposit: '', status: 'Active' })
+    setLeaseFile(null)
+    setModal('new')
+  }
+
+  const openEdit = (t) => {
+    setForm({ name: t.name, email: t.email, phone: t.phone || '', unit_id: t.unit_id || '', rent: t.rent || '', deposit: t.deposit || '', status: t.status })
+    setLeaseFile(null)
+    setModal(t)
+  }
+
   const saveTenant = async () => {
-    if (!form.name || !form.unit_id) return alert('Name and Unit are required')
+    if (!form.name || !form.email || !form.unit_id) return alert('Name, Email, and Unit are required')
     setSaving(true)
     try {
       const payload = { ...form, user_id: user.id, rent: parseFloat(form.rent) || 0, deposit: parseFloat(form.deposit) || 0 }
-      const { error } = await supabase.from('tenants').insert([payload])
-      if (error) throw error
+      let tenantId = modal?.id
+
+      if (modal === 'new') {
+        const { data, error } = await supabase.from('tenants').insert([payload]).select().single()
+        if (error) throw error
+        tenantId = data.id
+      } else {
+        const { error } = await supabase.from('tenants').update(payload).eq('id', modal.id)
+        if (error) throw error
+      }
+
+      // Handle Lease File Upload
+      if (leaseFile && tenantId) {
+        const ext = leaseFile.name.split('.').pop()
+        const path = `${user.id}/${tenantId}/${Date.now()}.${ext}`
+        const { error: uploadError } = await supabase.storage.from('leases').upload(path, leaseFile)
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from('leases').getPublicUrl(path)
+          await supabase.from('leases').insert([{
+            tenant_id: tenantId, unit_id: form.unit_id || null, file_url: publicUrl,
+            file_name: leaseFile.name, status: 'Active'
+          }])
+        }
+      }
+
       await supabase.from('units').update({ status: 'Occupied' }).eq('id', form.unit_id)
       fetchAll(); setModal(null)
     } catch (err) { alert(err.message) }
@@ -105,8 +146,8 @@ export default function Tenants() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 32 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0 }}>Residents</h2>
-              <button onClick={() => { setForm({ name: '', email: '', phone: '', unit_id: '', rent: '', deposit: '', status: 'Active' }); setModal('new') }} 
-                style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 20px', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
+              <button onClick={openAdd} 
+                style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 24px', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
                 + Onboard
               </button>
             </div>
@@ -138,10 +179,10 @@ export default function Tenants() {
                   </div>
 
                   <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-                    {t.status === 'Active' ? (
-                      <button onClick={() => setReleaseModal(t)} style={{ flex: 1, padding: '10px', background: '#fff1f2', color: '#be123c', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Release Resident</button>
-                    ) : (
-                      <div style={{ flex: 1, padding: '10px', textAlign: 'center', color: '#94a3b8', fontSize: 12, fontWeight: 600, background: '#f8fafc', borderRadius: 10 }}>Released</div>
+                    <button onClick={() => setLeasesModal(t)} style={{ background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px', fontSize: 12, fontWeight: 700, flex: 1, cursor: 'pointer' }}>Docs</button>
+                    <button onClick={() => openEdit(t)} style={{ background: '#f0f9ff', color: '#075985', border: 'none', borderRadius: 10, padding: '10px', fontSize: 12, fontWeight: 700, flex: 1, cursor: 'pointer' }}>Edit</button>
+                    {t.status === 'Active' && (
+                      <button onClick={() => setReleaseModal(t)} style={{ flex: 1.5, padding: '10px', background: '#fff1f2', color: '#be123c', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Release Resident</button>
                     )}
                   </div>
                 </div>
@@ -152,13 +193,19 @@ export default function Tenants() {
       </div>
 
       {modal && (
-        <Modal title="Onboarding" onClose={() => setModal(null)}>
+        <Modal title={modal === 'new' ? 'Onboarding' : 'Edit Resident'} onClose={() => setModal(null)}>
           {inp('Full Name', 'name', form, setForm)}
           {inp('Email', 'email', form, setForm, 'email')}
+          {inp('Phone', 'phone', form, setForm, 'tel')}
           <div style={{ marginBottom: 16 }}>
             <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 6 }}>SELECT UNIT</label>
             <select value={form.unit_id} onChange={e => setForm({ ...form, unit_id: e.target.value })} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: 12, fontSize: 14 }}>
-              <option value="">— Choose Vacant Unit —</option>
+              <option value="">— Choose Unit —</option>
+              {modal !== 'new' && tenants.find(t => t.id === modal.id)?.unit && (
+                <option value={tenants.find(t => t.id === modal.id).unit_id}>
+                  Current: Unit {tenants.find(t => t.id === modal.id).unit.unit_number}
+                </option>
+              )}
               {vacantUnits.map(u => <option key={u.id} value={u.id}>Unit {u.unit_number} ({u.property?.name})</option>)}
             </select>
           </div>
@@ -166,8 +213,12 @@ export default function Tenants() {
             {inp('Rent ($)', 'rent', form, setForm, 'number')}
             {inp('Deposit ($)', 'deposit', form, setForm, 'number')}
           </div>
-          <button onClick={saveTenant} disabled={saving} style={{ width: '100%', padding: '14px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer', marginTop: 10 }}>
-            {saving ? 'Saving...' : 'Complete Onboarding'}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 6 }}>LEASE AGREEMENT</label>
+            <input type="file" accept=".pdf" onChange={e => setLeaseFile(e.target.files[0])} style={{ fontSize: 12 }} />
+          </div>
+          <button onClick={saveTenant} disabled={saving} style={{ width: '100%', padding: '14px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
+            {saving ? 'Saving...' : modal === 'new' ? 'Complete Onboarding' : 'Save Changes'}
           </button>
         </Modal>
       )}
@@ -182,6 +233,24 @@ export default function Tenants() {
           <button onClick={handleRelease} disabled={saving} style={{ width: '100%', padding: '14px', background: '#be123c', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>Confirm Release</button>
         </Modal>
       )}
+
+      {leasesModal && (
+        <Modal title="Resident Documents" onClose={() => setLeasesModal(null)}>
+          {leases.filter(l => l.tenant_id === leasesModal.id).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No documents uploaded.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {leases.filter(l => l.tenant_id === leasesModal.id).map(l => (
+                <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 16, background: '#f8fafc', borderRadius: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{l.file_name}</div>
+                  <a href={l.file_url} target="_blank" rel="noreferrer" style={{ background: '#1a1a2e', color: '#fff', padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>View</a>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+
       <style>{`
         @media (max-width: 768px) {
           .main-wrapper { flex-direction: column !important; }
