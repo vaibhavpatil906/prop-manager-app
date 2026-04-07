@@ -11,12 +11,7 @@ async function callWhatsApp(to, messageData) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_ID
   
-  console.log(`Sending WhatsApp to ${to} using PhoneID ${phoneId}...`)
-
-  if (!token || !phoneId) {
-    console.error('CRITICAL: Missing WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_ID in Environment Variables.')
-    return
-  }
+  if (!token || !phoneId) return
 
   try {
     const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
@@ -24,12 +19,9 @@ async function callWhatsApp(to, messageData) {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
     })
-    
-    const data = await res.json()
-    console.log('Meta API Response:', JSON.stringify(data))
-    return data
+    return await res.json()
   } catch (e) {
-    console.error('FETCH FAILED:', e)
+    return { error: e.message }
   }
 }
 
@@ -67,46 +59,28 @@ async function clearSession(phone) {
 
 // --- MAIN BOT ---
 export async function POST(req) {
-  console.log('--- NEW INCOMING REQUEST ---')
   try {
     const body = await req.json()
-    console.log('Request Body:', JSON.stringify(body))
-    
-    const entry = body.entry?.[0]
-    const changes = entry?.changes?.[0]?.value
-    const message = changes?.messages?.[0]
-    
-    if (!message) {
-      console.log('No message found in body. Ignoring.')
-      return NextResponse.json({ ok: true })
-    }
+    const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
+    if (!message) return NextResponse.json({ ok: true })
 
     const from = message.from
     const text = (message.text?.body || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "").trim()
     const listId = message.interactive?.list_reply?.id
-    
-    console.log(`From: ${from}, Text: "${text}", ListID: ${listId}`)
-
     if (!from || !text) return NextResponse.json({ ok: true })
 
     const input = text.toLowerCase()
     const cleanPhone = from.replace(/\D/g, '')
 
     // 1. Auth Owner
-    console.log('Authenticating phone:', cleanPhone)
-    const { data: profile, error: pErr } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
-    
-    if (pErr || !profile) {
-      console.log('Auth Failed:', pErr?.message || 'Profile not found')
-      await sendText(from, `⚠️ Unauthorized Number: ${cleanPhone}. Please add to app settings.`)
+    const { data: profile } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
+    if (!profile) {
+      await sendText(from, `⚠️ Unauthorized Number: ${cleanPhone}`)
       return NextResponse.json({ ok: true })
     }
 
-    console.log('Authenticated Profile:', profile.business_name)
-
-    // 2. Main Menu / Global Commands
+    // 2. Global Reset / Menu
     if (['hi', 'hello', 'menu', 'start', 'cancel', 'back', 'hey'].includes(input) || listId === 'nav_main') {
-      console.log('Triggering Main Menu...')
       await clearSession(from)
       await sendListMenu(from, 
         `👋 PropManager Home`,
@@ -122,7 +96,6 @@ export async function POST(req) {
     }
 
     const session = await getSession(from)
-    console.log('Current Session Step:', session?.step || 'none')
 
     // 3. Step-by-Step Logic
     if (session) {
@@ -144,7 +117,7 @@ export async function POST(req) {
       }
 
       if (session.step === 'awaiting_water_value') {
-        if (input === 'enter custom') return await sendText(from, "Type water amount:")
+        if (input === 'enter custom') return await sendText(from, "Type amount:")
         const water = input === 'skip (140)' ? 140 : parseFloat(text)
         const total = parseFloat(session.rent) + Math.max((session.curr_reading - session.prev_reading) * 10, 150) + water
         await supabase.from('utility_bills').upsert({ user_id: profile.id, tenant_id: session.tenant_id, billing_month: new Date().toISOString().slice(0, 7), prev_reading: session.prev_reading, curr_reading: session.curr_reading, rate_per_unit: 10, fixed_rent: session.rent, water_bill: water, total_amount: total, due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] })
@@ -167,7 +140,7 @@ export async function POST(req) {
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('tenant_id', session.tenant_id).eq('billing_month', month).single()
         if (bill) {
           const u = bill.curr_reading - bill.prev_reading; const l = Math.max(u * 10, 150); const upi = profile.upi_id ? `upi://pay?pa=${profile.upi_id}&pn=${encodeURIComponent(profile.business_name)}&am=${bill.total_amount}&cu=INR` : ''
-          await sendButtons(from, `🧾 *Bill: ${session.unit_num}*\n👤 ${session.tenant_name}\n💰 Total: ₹${parseFloat(bill.total_amount).toLocaleString()}\n${upi ? `📲 *PAY LINK:*\n${upi}\n` : ''}`, ["Main Menu", "Get Unit Bill"])
+          await sendButtons(from, `🧾 *Bill Detail*\n💰 Total: ₹${parseFloat(bill.total_amount).toLocaleString()}\n${upi ? `📲 *PAY LINK:*\n${upi}\n` : ''}`, ["Main Menu", "Get Unit Bill"])
         }
         return await clearSession(from)
       }
@@ -220,7 +193,6 @@ export async function POST(req) {
     await sendText(from, "❓ Send *Hi* for menu.")
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error('CRITICAL SERVER ERROR:', err); 
     return NextResponse.json({ ok: true })
   }
 }
@@ -234,9 +206,9 @@ async function generateMonthlyReport(from, profileId, targetMonth) {
   let r = `📊 *Report: ${targetMonth}*\n\n`; let gt = 0
   bills.forEach(b => {
     const u = b.curr_reading - b.prev_reading; const l = Math.max(u * 10, 150); const t = parseFloat(b.fixed_rent) + l + parseFloat(b.water_bill)
-    r += `🏠 *${uMap[b.tenant_id]}* (${tMap[b.tenant_id]})\n▫️ Rent: ₹${parseFloat(b.fixed_rent).toLocaleString()}\n▫️ Light: ₹${l.toLocaleString()} (${u}u)\n▫️ Water: ₹${parseFloat(b.water_bill).toLocaleString()}\n💰 Total: ₹${t.toLocaleString()}\n_________________________\n\n`; gt += t
+    r += `🏠 *${uMap[b.tenant_id]}* (${tMap[b.tenant_id]})\n💰 Total: ₹${t.toLocaleString()}\n_________________________\n\n`; gt += t
   })
-  await sendButtons(from, r + `⭐ GRAND TOTAL: ₹${gt.toLocaleString()}`, ["Main Menu", "Monthly Report"])
+  await sendButtons(from, r + `⭐ TOTAL: ₹${gt.toLocaleString()}`, ["Main Menu", "Monthly Report"])
 }
 
 export async function GET(req) {
