@@ -76,11 +76,20 @@ async function clearSession(phone) {
 
 // --- AI SEARCH HELPER ---
 async function handleAISearch(from, profileId, userQuery) {
+  if (!process.env.GEMINI_API_KEY) {
+    console.error('AI Error: GEMINI_API_KEY is missing in environment variables.')
+    return await sendText(from, "⚠️ AI Assistant is not configured. Please add the GEMINI_API_KEY to Vercel.")
+  }
+
   try {
     // 1. Fetch current context from database
-    const { data: tenants } = await supabase.from('tenants').select('name, status, unit_id, phone').eq('user_id', profileId)
-    const { data: units } = await supabase.from('units').select('unit_number, rent, status, id').in('id', (tenants || []).map(t => t.unit_id))
-    const { data: bills } = await supabase.from('utility_bills').select('billing_month, total_amount, tenant_id').eq('user_id', profileId).order('billing_month', { ascending: false }).limit(20)
+    const { data: tenants, error: tErr } = await supabase.from('tenants').select('name, status, unit_id, phone').eq('user_id', profileId)
+    const { data: units, error: uErr } = await supabase.from('units').select('unit_number, rent, status, id').in('id', (tenants || []).map(t => t.unit_id))
+    const { data: bills, error: bErr } = await supabase.from('utility_bills').select('billing_month, total_amount, tenant_id').eq('user_id', profileId).order('billing_month', { ascending: false }).limit(20)
+
+    if (tErr || uErr || bErr) {
+      console.error('Database Context Error:', { tErr, uErr, bErr })
+    }
 
     // 2. Prepare context for Gemini
     const context = {
