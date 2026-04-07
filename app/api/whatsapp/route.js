@@ -10,12 +10,30 @@ const supabase = createClient(
 async function callWhatsApp(to, messageData) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_ID
-  if (!token || !phoneId) return
-  return fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
-  })
+  
+  if (!token || !phoneId) {
+    console.error('MISSING TOKENS:', { hasToken: !!token, hasPhoneId: !!phoneId })
+    return
+  }
+
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Bearer ${token}`, 
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
+    })
+    
+    const data = await res.json()
+    if (data.error) {
+      console.error('WHATSAPP API ERROR:', JSON.stringify(data.error))
+    }
+    return data
+  } catch (e) {
+    console.error('FETCH FAILED:', e)
+  }
 }
 
 const sendText = (to, text) => callWhatsApp(to, { type: "text", text: { body: text } })
@@ -54,25 +72,28 @@ async function clearSession(phone) {
 export async function POST(req) {
   try {
     const body = await req.json()
-    const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
+    
+    const changes = body.entry?.[0]?.changes?.[0]?.value
+    const message = changes?.messages?.[0]
     if (!message) return NextResponse.json({ ok: true })
 
     const from = message.from
     const text = (message.text?.body || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "").trim()
     const listId = message.interactive?.list_reply?.id
+    
     if (!from || !text) return NextResponse.json({ ok: true })
 
     const input = text.toLowerCase()
-    
-    // 1. Auth Owner
     const cleanPhone = from.replace(/\D/g, '')
+
+    // 1. Auth Owner
     const { data: profile } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
     if (!profile) {
-      await sendText(from, `⚠️ Unauthorized: ${cleanPhone}`)
+      await sendText(from, `⚠️ Unauthorized Number: ${cleanPhone}. Please register in app settings.`)
       return NextResponse.json({ ok: true })
     }
 
-    // 2. Global Reset / Menu (Detect any greeting)
+    // 2. Main Menu / Global Commands
     if (['hi', 'hello', 'menu', 'start', 'cancel', 'back', 'hey'].includes(input) || listId === 'nav_main') {
       await clearSession(from)
       await sendListMenu(from, 
@@ -90,9 +111,8 @@ export async function POST(req) {
 
     const session = await getSession(from)
 
-    // 3. Handle Active Session Steps
+    // 3. Step-by-Step Paths
     if (session) {
-      // READING FLOW
       if (session.step === 'awaiting_unit_reading') {
         const unitNum = text.toUpperCase()
         const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', unitNum).single()
@@ -102,12 +122,14 @@ export async function POST(req) {
         await updateSession(from, { step: 'awaiting_reading_value', unit_id: unit.id, unit_num: unitNum, tenant_name: tenant.name, tenant_id: tenant.id, prev_reading: last?.curr_reading || 0, rent: unit.rent })
         return await sendText(from, `👤 *Tenant:* ${tenant.name}\n📟 *Previous:* ${last?.curr_reading || 0}\n\nWhat is the *Current Reading*?`)
       }
+      
       if (session.step === 'awaiting_reading_value') {
         const curr = parseFloat(text)
         if (isNaN(curr)) return await sendText(from, "❌ Send a number.")
         await updateSession(from, { step: 'awaiting_water_value', curr_reading: curr })
         return await sendButtons(from, `📟 *Current:* ${curr}`, ["Skip (140)", "Enter Custom"])
       }
+
       if (session.step === 'awaiting_water_value') {
         if (input === 'enter custom') return await sendText(from, "Type water amount:")
         const water = input === 'skip (140)' ? 140 : parseFloat(text)
@@ -116,7 +138,7 @@ export async function POST(req) {
         await sendButtons(from, `✅ *Bill Saved*\n💰 Total: ₹${total.toLocaleString()}`, ["Main Menu", "Submit Reading"])
         return await clearSession(from)
       }
-      // LOOKUP FLOW
+
       if (session.step === 'awaiting_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         const { data: tenant } = await supabase.from('tenants').select('id, name, unit_id').eq('id', tenantId).single()
@@ -126,6 +148,7 @@ export async function POST(req) {
         await updateSession(from, { step: 'awaiting_month_selection', tenant_id: tenantId, tenant_name: tenant?.name, unit_num: unit?.unit_number || 'Unit' })
         return await sendListMenu(from, `📅 Bills: ${tenant?.name}`, "Select month:", "Select", [{ title: "MONTHS", rows: bills.map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
       }
+
       if (session.step === 'awaiting_month_selection') {
         const month = listId?.replace('month_', '')
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('tenant_id', session.tenant_id).eq('billing_month', month).single()
@@ -135,6 +158,7 @@ export async function POST(req) {
         }
         return await clearSession(from)
       }
+
       if (session.step === 'awaiting_report_month_selection') {
         await generateMonthlyReport(from, profile.id, listId?.replace('report_', ''))
         return await clearSession(from)
@@ -185,7 +209,7 @@ export async function POST(req) {
     await sendText(from, "❓ Send *Hi* for menu.")
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error('CRITICAL ERROR:', err); return NextResponse.json({ ok: true }) // Always return OK to WhatsApp
+    console.error('CRITICAL ERROR:', err); return NextResponse.json({ ok: true })
   }
 }
 
