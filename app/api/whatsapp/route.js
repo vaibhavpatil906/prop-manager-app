@@ -82,7 +82,7 @@ export async function POST(req) {
         [
           { title: "⚡ RECORD", rows: [{ id: "path_reading", title: "Submit Reading", description: "Step-by-step entry" }] },
           { title: "📊 REPORTS", rows: [
-              { id: "path_monthly", title: "Monthly Report", description: "View detailed breakdown" },
+              { id: "path_monthly", title: "Monthly Report", description: "Detailed summary by month" },
               { id: "path_unpaid", title: "Unpaid Bills", description: "Grouped by Month" }
           ]},
           { title: "🔍 LOOKUP", rows: [
@@ -96,7 +96,7 @@ export async function POST(req) {
 
     // 3. Step-by-Step Logic
     if (session) {
-      // PATH: SUBMIT READING (Steps)
+      // SUBMIT READING PATH
       if (session.step === 'awaiting_unit_reading') {
         const unitNum = text.toUpperCase()
         const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', unitNum).single()
@@ -138,23 +138,15 @@ export async function POST(req) {
         return NextResponse.json({ ok: true })
       }
 
-      // PATH: GET UNIT BILL (Hierarchical Selection)
+      // UNIT LOOKUP PATH
       if (session.step === 'awaiting_tenant_selection') {
         const tenantId = listId.replace('tenant_', '')
         const { data: tenant } = await supabase.from('tenants').select('id, name, units(unit_number)').eq('id', tenantId).single()
         const { data: bills } = await supabase.from('utility_bills').select('billing_month').eq('tenant_id', tenantId).order('billing_month', { ascending: false }).limit(10)
-        
-        if (!bills?.length) {
-          await sendText(from, `📭 No bill history found for *${tenant.name}*.`)
-          await clearSession(from)
-        } else {
+        if (!bills?.length) { await sendText(from, `📭 No bill history for *${tenant.name}*.`); await clearSession(from) }
+        else {
           await updateSession(from, { step: 'awaiting_month_selection', tenant_id: tenantId, tenant_name: tenant.name, unit_num: tenant.units.unit_number })
-          await sendListMenu(from, 
-            `📅 Bills for ${tenant.name}`,
-            "Select the billing month you want to view:",
-            "Select Month",
-            [{ title: "AVAILABLE MONTHS", rows: bills.map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }]
-          )
+          await sendListMenu(from, `📅 Bills for ${tenant.name}`, "Select month:", "Select Month", [{ title: "AVAILABLE MONTHS", rows: bills.map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
         }
         return NextResponse.json({ ok: true })
       }
@@ -162,25 +154,18 @@ export async function POST(req) {
       if (session.step === 'awaiting_month_selection') {
         const month = listId.replace('month_', '')
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('tenant_id', session.tenant_id).eq('billing_month', month).single()
-        
-        if (!bill) await sendText(from, `❌ Error retrieving bill for ${month}.`)
-        else {
-          const units = bill.curr_reading - bill.prev_reading
-          const light = Math.max(units * 10, 150)
-          const upi = profile.upi_id ? `upi://pay?pa=${profile.upi_id}&pn=${encodeURIComponent(profile.business_name)}&am=${bill.total_amount}&cu=INR` : ''
+        if (bill) {
+          const units = bill.curr_reading - bill.prev_reading; const light = Math.max(units * 10, 150); const upi = profile.upi_id ? `upi://pay?pa=${profile.upi_id}&pn=${encodeURIComponent(profile.business_name)}&am=${bill.total_amount}&cu=INR` : ''
           await sendText(from, `🧾 *Bill: ${session.unit_num}*\n👤 Tenant: ${session.tenant_name}\n📅 Month: ${month}\n_________________________\n📟 Reading: ${bill.prev_reading}➔${bill.curr_reading} (${units}u)\n▫️ Rent: ₹${parseFloat(bill.fixed_rent).toLocaleString()}\n▫️ Light: ₹${light.toLocaleString()}\n▫️ Water: ₹${parseFloat(bill.water_bill).toLocaleString()}\n💰 *TOTAL: ₹${parseFloat(bill.total_amount).toLocaleString()}*\n_________________________\n\n${upi ? `📲 *PAY LINK:*\n${upi}\n` : ''}`)
         }
-        await clearSession(from)
-        return NextResponse.json({ ok: true })
+        await clearSession(from); return NextResponse.json({ ok: true })
       }
 
-      // PATH: MONTHLY REPORT (Manual)
-      if (session.step === 'awaiting_month_manual') {
-        const manualMatch = input.match(/^(0[1-9]|1[0-2])[-/](20\d{2})$/)
-        if (!manualMatch) return await sendText(from, "❌ Invalid format. Please use *MM-YYYY* (e.g., 01-2026).")
-        await generateMonthlyReport(from, profile.id, `${manualMatch[2]}-${manualMatch[1]}`)
-        await clearSession(from)
-        return NextResponse.json({ ok: true })
+      // MONTHLY REPORT PATH
+      if (session.step === 'awaiting_report_month_selection') {
+        const monthCode = listId.replace('report_', '')
+        await generateMonthlyReport(from, profile.id, monthCode)
+        await clearSession(from); return NextResponse.json({ ok: true })
       }
     }
 
@@ -191,44 +176,33 @@ export async function POST(req) {
     }
     else if (listId === 'path_lookup' || input === 'get unit bill') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, units(unit_number)').eq('user_id', profile.id).eq('status', 'Active').order('unit_id')
-      if (!tenants?.length) return await sendText(from, "🏠 No active tenants found.")
-      
+      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
       await updateSession(from, { step: 'awaiting_tenant_selection' })
-      await sendListMenu(from, 
-        "🔍 Bill Lookup",
-        "Select a tenant to view their billing history:",
-        "Select Tenant",
-        [{ title: "ACTIVE TENANTS", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.units.unit_number} - ${t.name}` })) }]
-      )
+      await sendListMenu(from, "🔍 Bill Lookup", "Select tenant:", "Select Tenant", [{ title: "ACTIVE TENANTS", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.units.unit_number} - ${t.name}` })) }])
     }
     else if (listId === 'path_monthly' || input === 'monthly report') {
-      const now = new Date(); const cur = now.toLocaleDateString('en-US',{month:'short',year:'numeric'}); const last = new Date(now.getFullYear(),now.getMonth()-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'})
-      await sendButtons(from, "📅 *Detailed Report*\nSelect a month:", [cur, last, "Manual Entry"])
-    }
-    else if (input === 'manual entry') {
-      await updateSession(from, { step: 'awaiting_month_manual' })
-      await sendText(from, "⌨️ Type month in *MM-YYYY* (e.g. 01-2026):")
-    }
-    else if (input.match(/^([a-z]{3})\s*(20\d{2})$/)) {
-      const monthsMap = { jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06', jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12' }
-      const match = input.match(/^([a-z]{3})\s*(20\d{2})$/)
-      await generateMonthlyReport(from, profile.id, `${match[2]}-${monthsMap[match[1]]}`)
+      // Dynamic Month List (Last 12 months)
+      const rows = []
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(); d.setMonth(d.getMonth() - i)
+        const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        const code = d.toISOString().slice(0, 7)
+        rows.push({ id: `report_${code}`, title: label })
+      }
+      await updateSession(from, { step: 'awaiting_report_month_selection' })
+      await sendListMenu(from, "📅 Monthly Report", "Select a month to generate the property-wide report:", "Select Month", [{ title: "LAST 12 MONTHS", rows }])
     }
     else if (listId === 'path_unpaid' || input === 'unpaid bills') {
       const { data: bills } = await supabase.from('utility_bills').select(`total_amount, billing_month, tenants (name, units (unit_number))`).eq('user_id', profile.id).order('billing_month', { ascending: false })
       if (!bills?.length) return await sendText(from, "✅ No unpaid bills found!")
-      
-      let r = `🚩 *Outstanding Balances (By Month)*\n_________________________\n\n`
-      let grandTotal = 0
-      const groupedByMonth = bills.reduce((acc, b) => { const k = b.billing_month; acc[k] = acc[k] || []; acc[k].push(b); return acc }, {})
-      for (const [month, monthBills] of Object.entries(groupedByMonth)) {
-        let monthTotal = 0
-        const displayMonth = new Date(month + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-        r += `📅 *${displayMonth}*\n`
-        monthBills.forEach(b => { r += `▫️ ${b.tenants.units.unit_number} (${b.tenants.name}): ₹${parseFloat(b.total_amount).toLocaleString()}\n`; monthTotal += parseFloat(b.total_amount) })
-        r += `💰 *Subtotal: ₹${monthTotal.toLocaleString()}*\n\n`; grandTotal += monthTotal
+      let r = `🚩 *Outstanding Balances*\n_________________________\n\n`; let gt = 0
+      const grouped = bills.reduce((acc, b) => { const k = b.billing_month; acc[k] = acc[k] || []; acc[k].push(b); return acc }, {})
+      for (const [month, mBills] of Object.entries(grouped)) {
+        let mt = 0; const display = new Date(month + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        r += `📅 *${display}*\n`; mBills.forEach(b => { r += `▫️ ${b.tenants.units.unit_number} (${b.tenants.name}): ₹${parseFloat(b.total_amount).toLocaleString()}\n`; mt += parseFloat(b.total_amount) })
+        r += `💰 *Subtotal: ₹${mt.toLocaleString()}*\n\n`; gt += mt
       }
-      await sendText(from, r + `_________________________\n⭐ *TOTAL DUE: ₹${grandTotal.toLocaleString()}*`)
+      await sendText(from, r + `_________________________\n⭐ *TOTAL DUE: ₹${gt.toLocaleString()}*`)
     }
     else if (listId === 'path_summary' || input === 'property summary') {
       const { data: props } = await supabase.from('properties').select('name, units').eq('user_id', profile.id)
