@@ -64,7 +64,6 @@ export async function POST(req) {
       return NextResponse.json({ ok: true })
     }
 
-    // Date Helpers
     const now = new Date()
     const curMonthLabel = now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
@@ -84,88 +83,94 @@ export async function POST(req) {
 
     // 4. Option: Monthly Report (Send Month Buttons)
     else if (input === 'monthly report') {
-      await sendButtons(from, "📅 *Select Month*\nChoose a month to view the full report:", 
+      await sendButtons(from, "📅 *Select Month*\nChoose a month for the detailed report:", 
         [curMonthLabel, lastMonthLabel, "Other Month"]
       )
     }
     
     else if (input === 'other month') {
-      await sendText(from, "⌨️ Please type the month in *MM-YYYY* format (e.g., 10-2025).")
+      await sendText(from, "⌨️ Type month in *MM-YYYY* (e.g., 10-2025).")
     }
 
     // 5. Option: Unpaid Bills
     else if (input === 'unpaid bills') {
       const month = now.toISOString().slice(0, 7)
       const { data: bills } = await supabase.from('utility_bills').select(`total_amount, tenants(name, units(unit_number))`).eq('user_id', profile.id).eq('billing_month', month)
-      let msg = bills?.length ? `🚩 *Pending (${month}):*\n` + bills.map(b => `• *${b.tenants.units.unit_number}*: ₹${b.total_amount.toLocaleString()}`).join('\n') : `✅ All paid for ${month}!`
+      let msg = bills?.length ? `🚩 *Pending (${month}):*\n` + bills.map(b => `• *${b.tenants.units.unit_number}*: ₹${b.total_amount.toLocaleString()}`).join('\n') : `✅ All bills paid for ${month}!`
       await sendText(from, msg)
     }
 
     // 6. Handle Special Inputs (Month Selection or Readings)
     else {
-      // Check if input matches our dynamic month buttons or manual format
-      const monthsMap = {
-        jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
-        jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
-      }
-
+      const monthsMap = { jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06', jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12' }
       let targetMonth = ""
-      
-      // Try parsing MM-YYYY manual input
       const manualMatch = input.match(/^(0[1-9]|1[0-2])[-/](20\d{2})$/)
-      if (manualMatch) {
-        targetMonth = `${manualMatch[2]}-${manualMatch[1]}`
-      } else {
-        // Try parsing button label (e.g., "Jan 2026")
+      if (manualMatch) targetMonth = `${manualMatch[2]}-${manualMatch[1]}`
+      else {
         const buttonMatch = input.match(/^([a-z]{3})\s*(20\d{2})$/)
-        if (buttonMatch && monthsMap[buttonMatch[1]]) {
-          targetMonth = `${buttonMatch[2]}-${monthsMap[buttonMatch[1]]}`
-        }
+        if (buttonMatch && monthsMap[buttonMatch[1]]) targetMonth = `${buttonMatch[2]}-${monthsMap[buttonMatch[1]]}`
       }
 
       if (targetMonth) {
         const { data: bills } = await supabase
           .from('utility_bills')
-          .select(`total_amount, tenants(name, units(unit_number))`)
+          .select(`
+            fixed_rent, 
+            water_bill, 
+            total_amount, 
+            curr_reading, 
+            prev_reading, 
+            rate_per_unit,
+            tenants (name, units (unit_number))
+          `)
           .eq('user_id', profile.id)
           .eq('billing_month', targetMonth)
 
         if (!bills?.length) {
           await sendText(from, `📭 No data found for *${targetMonth}*.`)
         } else {
-          let report = `📊 *Report: ${targetMonth}*\n_________________________\n\n`
-          let total = 0
+          let report = `📊 *Detailed Report: ${targetMonth}*\n_________________________\n\n`
+          let grandTotal = 0
+
           bills.forEach(b => {
-            report += `• *${b.tenants.units.unit_number}*: ₹${b.total_amount.toLocaleString()}\n`
-            total += b.total_amount
+            const units = b.curr_reading - b.prev_reading
+            const lightBill = Math.max(units * (b.rate_per_unit || 10), 150)
+            const unitTotal = parseFloat(b.fixed_rent) + lightBill + parseFloat(b.water_bill)
+            
+            report += `🏠 *${b.tenants.units.unit_number}* (${b.tenants.name})\n` +
+                      `▫️ Rent: ₹${parseFloat(b.fixed_rent).toLocaleString()}\n` +
+                      `▫️ Light: ₹${lightBill.toLocaleString()} (${units}u)\n` +
+                      `▫️ Water: ₹${parseFloat(b.water_bill).toLocaleString()}\n` +
+                      `💰 *Total: ₹${unitTotal.toLocaleString()}*\n` +
+                      `_________________________\n\n`
+            
+            grandTotal += unitTotal
           })
-          report += `_________________________\n💰 *Total: ₹${total.toLocaleString()}*`
+
+          report += `⭐ *GRAND TOTAL: ₹${grandTotal.toLocaleString()}*`
           await sendText(from, report)
         }
         return NextResponse.json({ ok: true })
       }
 
-      // Check if input is Reading (e.g., "G01 4500")
       const parts = text.trim().split(/\s+/)
       if (parts.length === 2 && !isNaN(parseFloat(parts[1]))) {
         const unitNumber = parts[0].toUpperCase()
         const currentReading = parseFloat(parts[1])
-
         const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', unitNumber).single()
 
         if (unit?.tenants?.[0]) {
           const tenant = unit.tenants[0]
           const month = now.toISOString().slice(0, 7)
           const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', tenant.id).order('billing_month', { ascending: false }).limit(1).single()
-
           const prevReading = last?.curr_reading || 0
           if (currentReading < prevReading) {
             await sendText(from, `❌ *Lower Reading Error*\nCurrent: ${currentReading} | Prev: ${prevReading}`)
             return NextResponse.json({ ok: true })
           }
 
-          const energyBill = Math.max((currentReading - prevReading) * 10, 150)
-          const total = parseFloat(unit.rent) + energyBill + 140
+          const lightBill = Math.max((currentReading - prevReading) * 10, 150)
+          const total = parseFloat(unit.rent) + lightBill + 140
 
           await supabase.from('utility_bills').upsert({
             user_id: profile.id, tenant_id: tenant.id, billing_month: month,
