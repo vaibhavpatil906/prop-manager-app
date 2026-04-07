@@ -83,7 +83,14 @@ async function handleAISearch(from, profileId, userQuery) {
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" })
+    
+    // Try 1.5-flash first, fallback to gemini-pro if it fails (handles 404s)
+    let model;
+    try {
+      model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+    } catch (e) {
+      model = genAI.getGenerativeModel({ model: "gemini-pro" })
+    }
 
     // 1. Fetch current context from database
     const { data: tenants, error: tErr } = await supabase.from('tenants').select('name, status, unit_id, phone').eq('user_id', profileId)
