@@ -70,63 +70,116 @@ async function clearSession(phone) {
   await supabase.from('bot_sessions').delete().eq('phone', phone)
 }
 
-// --- AI SEARCH HELPER ---
+// --- AI SEARCH & UPDATE TOOLS ---
 async function handleAISearch(from, profileId, userQuery) {
   const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    return await sendText(from, "⚠️ AI Assistant is not configured. Please add the GEMINI_API_KEY to Vercel.")
-  }
+  if (!apiKey) return await sendText(from, "⚠️ AI Not Configured.")
 
   try {
-    // 1. Initialize Gemini with the new Preview Model
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" })
+    
+    // 1. Define AI Tools (Functions)
+    const tools = [{
+      functionDeclarations: [
+        {
+          name: "update_unit_rent",
+          description: "Update the monthly rent for a unit number.",
+          parameters: {
+            type: "OBJECT",
+            properties: { unit_number: { type: "STRING" }, new_rent: { type: "NUMBER" } },
+            required: ["unit_number", "new_rent"]
+          }
+        },
+        {
+          name: "update_maintenance_status",
+          description: "Update status of a maintenance request for a unit.",
+          parameters: {
+            type: "OBJECT",
+            properties: { unit_number: { type: "STRING" }, status: { type: "STRING", description: "Pending, In Progress, Completed" } },
+            required: ["unit_number", "status"]
+          }
+        },
+        {
+          name: "update_tenant_phone",
+          description: "Update a tenant's contact phone number.",
+          parameters: {
+            type: "OBJECT",
+            properties: { tenant_name: { type: "STRING" }, new_phone: { type: "STRING" } },
+            required: ["tenant_name", "new_phone"]
+          }
+        },
+        {
+          name: "mark_payment_paid",
+          description: "Mark a payment as paid for a unit and month.",
+          parameters: {
+            type: "OBJECT",
+            properties: { unit_number: { type: "STRING" }, month: { type: "STRING", description: "YYYY-MM" }, amount: { type: "NUMBER" } },
+            required: ["unit_number", "month"]
+          }
+        }
+      ]
+    }]
 
-    // 2. Fetch COMPLETE business context for this owner
-    const [
-      { data: properties },
-      { data: units },
-      { data: tenants },
-      { data: bills },
-      { data: payments },
-      { data: maintenance }
-    ] = await Promise.all([
-      supabase.from('properties').select('*').eq('user_id', profileId),
-      supabase.from('units').select('id, property_id, unit_number, rent, status'), // Fetch all units might be cross-property, but good enough for now. Better: filter by property.
-      supabase.from('tenants').select('*').eq('user_id', profileId),
-      supabase.from('utility_bills').select('*').eq('user_id', profileId).order('billing_month', { ascending: false }).limit(50),
-      supabase.from('payments').select('*, tenants!inner(user_id)').eq('tenants.user_id', profileId).order('due_date', { ascending: false }).limit(50),
-      supabase.from('maintenance_requests').select('*, tenants!inner(user_id)').eq('tenants.user_id', profileId).limit(50)
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview", tools })
+
+    // 2. Fetch context for decision making
+    const [ { data: tenants }, { data: units }, { data: maint } ] = await Promise.all([
+      supabase.from('tenants').select('id, name, unit_id').eq('user_id', profileId),
+      supabase.from('units').select('id, unit_number, rent'),
+      supabase.from('maintenance_requests').select('id, status, description, tenant_id').limit(20)
     ])
 
-    const context = {
-      properties,
-      units, // Note: units doesn't have user_id directly in our current schema, but tenants do. We'll pass all units for simplicity, or we can filter them in JS.
-      tenants,
-      utility_bills: bills,
-      payments,
-      maintenance_requests: maintenance
+    const chat = model.startChat()
+    const prompt = `Context: ${JSON.stringify({ tenants, units, maint })}. Question: ${userQuery}`
+    const result = await chat.sendMessage(prompt)
+    const call = result.response.functionCalls()?.[0]
+
+    if (call) {
+      const { name, args } = call
+      let dbResult = ""
+
+      if (name === "update_unit_rent") {
+        const u = units.find(x => x.unit_number.toUpperCase() === args.unit_number.toUpperCase())
+        if (u) {
+          await supabase.from('units').update({ rent: args.new_rent }).eq('id', u.id)
+          dbResult = `✅ Updated rent for ${args.unit_number} to ₹${args.new_rent}.`
+        } else dbResult = `❌ Unit ${args.unit_number} not found.`
+      }
+
+      if (name === "update_maintenance_status") {
+        const u = units.find(x => x.unit_number.toUpperCase() === args.unit_number.toUpperCase())
+        const t = tenants.find(x => x.unit_id === u?.id)
+        const req = maint.find(x => x.tenant_id === t?.id && x.status !== 'Completed')
+        if (req) {
+          await supabase.from('maintenance_requests').update({ status: args.status }).eq('id', req.id)
+          dbResult = `✅ Maintenance for ${args.unit_number} marked as ${args.status}.`
+        } else dbResult = `❌ No active request found for ${args.unit_number}.`
+      }
+
+      if (name === "update_tenant_phone") {
+        const t = tenants.find(x => x.name.toLowerCase().includes(args.tenant_name.toLowerCase()))
+        if (t) {
+          await supabase.from('tenants').update({ phone: args.new_phone }).eq('id', t.id)
+          dbResult = `✅ Updated ${t.name}'s phone to ${args.new_phone}.`
+        } else dbResult = `❌ Tenant ${args.tenant_name} not found.`
+      }
+
+      if (name === "mark_payment_paid") {
+        const u = units.find(x => x.unit_number.toUpperCase() === args.unit_number.toUpperCase())
+        const t = tenants.find(x => x.unit_id === u?.id)
+        if (t) {
+          await supabase.from('payments').upsert({ tenant_id: t.id, billing_month: args.month, payment_status: 'Paid', amount_paid: args.amount, payment_date: new Date() })
+          dbResult = `✅ Payment for ${args.unit_number} (${args.month}) marked as Paid.`
+        } else dbResult = `❌ Unit/Tenant not found.`
+      }
+
+      return await sendText(from, `🤖 *AI Update*\n\n${dbResult}`)
     }
 
-    const prompt = `System: You are an AI assistant for PropManager. Answer questions based ONLY on this complete database context: ${JSON.stringify(context)}. 
-    If you cannot find the answer, say "I don't have enough information in your records." 
-    User Query: ${userQuery}`
-
-    const result = await model.generateContent(prompt)
-    const answer = result.response.text()
-    
-    await sendText(from, `🤖 *AI Assistant (Flash 3)*\n\n${answer}`)
+    await sendText(from, `🤖 *AI Assistant*\n\n${result.response.text()}`)
   } catch (err) {
-    console.error('Gemini 3 Error:', err)
-    // Fallback to gemini-1.5-flash if 3 isn't available yet in region
-    try {
-      const genAI = new GoogleGenerativeAI(apiKey)
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
-      const result = await model.generateContent(`Context: ${userQuery}`)
-      return await sendText(from, `🤖 *AI Assistant (Fallback)*\n\n${result.response.text()}`)
-    } catch (e2) {
-      await sendText(from, "⚠️ AI Assistant is currently unavailable. Error: " + err.message)
-    }
+    console.error('AI Tool Error:', err)
+    await sendText(from, "⚠️ AI Update failed.")
   }
 }
 
@@ -153,13 +206,11 @@ export async function POST(req) {
       const { unit: unitNum, reading: curr, water: waterIn } = response
       const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', unitNum.toUpperCase()).single()
       if (!unit?.tenants?.[0]) return await sendText(from, `❌ Unit *${unitNum}* not found.`)
-      
       const tenant = unit.tenants[0]
       const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', tenant.id).order('billing_month', { ascending: false }).limit(1).single()
       const prev = last?.curr_reading || 0
       const water = parseFloat(waterIn) || 140
       const total = parseFloat(unit.rent) + Math.max((parseFloat(curr) - prev) * 10, 150) + water
-
       await supabase.from('utility_bills').upsert({ user_id: profile.id, tenant_id: tenant.id, billing_month: new Date().toISOString().slice(0, 7), prev_reading: prev, curr_reading: parseFloat(curr), rate_per_unit: 10, fixed_rent: unit.rent, water_bill: water, total_amount: total, due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] })
       return await sendButtons(from, `✅ *Recorded via Form*\n💰 Total: ₹${total.toLocaleString()}`, ["Main Menu", "Submit Reading"])
     }
@@ -262,7 +313,7 @@ export async function POST(req) {
       return await sendButtons(from, r, ["Main Menu"])
     }
 
-    // 6. AI Search
+    // 6. AI Search & Update
     await handleAISearch(from, profile.id, text)
     return NextResponse.json({ ok: true })
   } catch (err) {
