@@ -60,9 +60,15 @@ export async function POST(req) {
     // 1. Auth Owner
     const { data: profile } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
     if (!profile) {
-      await sendText(from, `⚠️ *Unauthorized: ${cleanPhone}*\nPlease update your PropManager Settings.`)
+      await sendText(from, `⚠️ *Unauthorized: ${cleanPhone}*\nPlease update settings in the app.`)
       return NextResponse.json({ ok: true })
     }
+
+    // Date Helpers
+    const now = new Date()
+    const curMonthLabel = now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const lastMonthLabel = lastMonthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 
     // 2. Menu Logic
     if (['hi', 'hello', 'menu', 'start'].includes(input)) {
@@ -76,33 +82,45 @@ export async function POST(req) {
       await sendText(from, "📝 *Enter Reading*\nSend: *[Unit] [Reading]*\nExample: *G01 4580*")
     }
 
-    // 4. Option: Monthly Report (Prompt for Month)
+    // 4. Option: Monthly Report (Send Month Buttons)
     else if (input === 'monthly report') {
-      await sendText(from, "📅 *Monthly Billing Report*\nPlease send the month you want to view.\n\n*Format:* MM-YYYY (e.g., 01-2026 or Jan 2026)")
+      await sendButtons(from, "📅 *Select Month*\nChoose a month to view the full report:", 
+        [curMonthLabel, lastMonthLabel, "Other Month"]
+      )
+    }
+    
+    else if (input === 'other month') {
+      await sendText(from, "⌨️ Please type the month in *MM-YYYY* format (e.g., 10-2025).")
     }
 
     // 5. Option: Unpaid Bills
     else if (input === 'unpaid bills') {
-      const month = new Date().toISOString().slice(0, 7)
+      const month = now.toISOString().slice(0, 7)
       const { data: bills } = await supabase.from('utility_bills').select(`total_amount, tenants(name, units(unit_number))`).eq('user_id', profile.id).eq('billing_month', month)
-      let msg = bills?.length ? `🚩 *Pending (${month}):*\n` + bills.map(b => `• *${b.tenants.units.unit_number}*: ₹${b.total_amount.toLocaleString()}`).join('\n') : `✅ All bills paid for ${month}!`
+      let msg = bills?.length ? `🚩 *Pending (${month}):*\n` + bills.map(b => `• *${b.tenants.units.unit_number}*: ₹${b.total_amount.toLocaleString()}`).join('\n') : `✅ All paid for ${month}!`
       await sendText(from, msg)
     }
 
-    // 6. Handle Special Inputs (Readings or Months)
+    // 6. Handle Special Inputs (Month Selection or Readings)
     else {
-      // Check if input is a Month Request (e.g., "01-2026" or "Jan 2026")
-      const monthRegex = /^(0[1-9]|1[0-2])[-/](20\d{2})$/
-      const namedMonthRegex = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s*(20\d{2})$/
-      
+      // Check if input matches our dynamic month buttons or manual format
+      const monthsMap = {
+        jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+        jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+      }
+
       let targetMonth = ""
-      if (monthRegex.test(input)) {
-        const [m, y] = input.split(/[-/]/)
-        targetMonth = `${y}-${m}`
-      } else if (namedMonthRegex.test(input)) {
-        const months = { jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06', jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12' }
-        const [mName, y] = input.split(/\s+/)
-        targetMonth = `${y}-${months[mName]}`
+      
+      // Try parsing MM-YYYY manual input
+      const manualMatch = input.match(/^(0[1-9]|1[0-2])[-/](20\d{2})$/)
+      if (manualMatch) {
+        targetMonth = `${manualMatch[2]}-${manualMatch[1]}`
+      } else {
+        // Try parsing button label (e.g., "Jan 2026")
+        const buttonMatch = input.match(/^([a-z]{3})\s*(20\d{2})$/)
+        if (buttonMatch && monthsMap[buttonMatch[1]]) {
+          targetMonth = `${buttonMatch[2]}-${monthsMap[buttonMatch[1]]}`
+        }
       }
 
       if (targetMonth) {
@@ -113,15 +131,15 @@ export async function POST(req) {
           .eq('billing_month', targetMonth)
 
         if (!bills?.length) {
-          await sendText(from, `📭 No billing data found for *${targetMonth}*.`)
+          await sendText(from, `📭 No data found for *${targetMonth}*.`)
         } else {
-          let report = `📊 *Billing Report for ${targetMonth}*\n_________________________\n\n`
+          let report = `📊 *Report: ${targetMonth}*\n_________________________\n\n`
           let total = 0
           bills.forEach(b => {
-            report += `• *${b.tenants.units.unit_number}* (${b.tenants.name}): ₹${b.total_amount.toLocaleString()}\n`
+            report += `• *${b.tenants.units.unit_number}*: ₹${b.total_amount.toLocaleString()}\n`
             total += b.total_amount
           })
-          report += `_________________________\n💰 *Month Total: ₹${total.toLocaleString()}*`
+          report += `_________________________\n💰 *Total: ₹${total.toLocaleString()}*`
           await sendText(from, report)
         }
         return NextResponse.json({ ok: true })
@@ -137,12 +155,12 @@ export async function POST(req) {
 
         if (unit?.tenants?.[0]) {
           const tenant = unit.tenants[0]
-          const month = new Date().toISOString().slice(0, 7)
+          const month = now.toISOString().slice(0, 7)
           const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', tenant.id).order('billing_month', { ascending: false }).limit(1).single()
 
           const prevReading = last?.curr_reading || 0
           if (currentReading < prevReading) {
-            await sendText(from, `❌ *Lower Reading Error*\nCurrent: ${currentReading} | Previous: ${prevReading}`)
+            await sendText(from, `❌ *Lower Reading Error*\nCurrent: ${currentReading} | Prev: ${prevReading}`)
             return NextResponse.json({ ok: true })
           }
 
@@ -153,11 +171,11 @@ export async function POST(req) {
             user_id: profile.id, tenant_id: tenant.id, billing_month: month,
             prev_reading: prevReading, curr_reading: currentReading,
             rate_per_unit: 10, fixed_rent: unit.rent, water_bill: 140, total_amount: total,
-            due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0]
+            due_date: new Date(now.getFullYear(), now.getMonth(), 10).toISOString().split('T')[0]
           })
 
           const upi = profile.upi_id ? `upi://pay?pa=${profile.upi_id}&pn=${encodeURIComponent(profile.business_name)}&am=${total}&cu=INR` : ''
-          await sendText(from, `✅ *Saved for ${unitNumber}*\nTenant: ${tenant.name}\nTotal: ₹${total.toLocaleString()}\n\n${upi ? `📲 *PAY LINK:*\n${upi}\n` : ''}_Reply 'Menu' for more._`)
+          await sendText(from, `✅ *Saved for ${unitNumber}*\nTotal: ₹${total.toLocaleString()}\n\n${upi ? `📲 *PAY LINK:*\n${upi}\n` : ''}_Reply 'Menu' for more._`)
         } else {
           await sendText(from, `❌ Unit *${unitNumber}* not found.`)
         }
