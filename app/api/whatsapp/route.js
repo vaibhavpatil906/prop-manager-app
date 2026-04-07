@@ -81,38 +81,22 @@ export async function POST(req) {
       await sendText(from, "📝 *Enter Reading*\nSend: *[Unit] [Reading]*\nExample: *G01 4580*")
     }
 
-    // 4. Option: Monthly Report (Send Month Buttons)
+    // 4. Option: Monthly Report
     else if (input === 'monthly report') {
       await sendButtons(from, "📅 *Select Month*\nChoose a month for the detailed report:", 
         [curMonthLabel, lastMonthLabel, "Other Month"]
       )
     }
 
-    // 5. Option: Unpaid Bills (Now shows all months)
+    // 5. Option: Unpaid Bills
     else if (input === 'unpaid bills') {
-      // Fetch all utility_bills that don't have a corresponding 'Paid' status in payments
-      // Based on typical schema, we check for bills without payment or with pending status
-      const { data: unpaidBills } = await supabase
-        .from('utility_bills')
-        .select(`
-          total_amount,
-          billing_month,
-          tenants (
-            name,
-            units (unit_number)
-          )
-        `)
-        .eq('user_id', profile.id)
-        .order('billing_month', { ascending: false })
+      const { data: unpaidBills } = await supabase.from('utility_bills').select(`total_amount, billing_month, tenants (name, units (unit_number))`).eq('user_id', profile.id).order('billing_month', { ascending: false })
 
-      // Note: Real filter should include payment_status check if available
       if (!unpaidBills?.length) {
-        await sendText(from, "✅ No unpaid bills found across all months!")
+        await sendText(from, "✅ No unpaid bills found!")
       } else {
         let report = `🚩 *Outstanding Collections*\n_________________________\n\n`
         let grandTotal = 0
-        
-        // Group by tenant for cleaner display
         const grouped = unpaidBills.reduce((acc, bill) => {
           const key = `${bill.tenants.units.unit_number} - ${bill.tenants.name}`
           if (!acc[key]) acc[key] = []
@@ -130,7 +114,6 @@ export async function POST(req) {
           report += `💰 *Balance: ₹${tenantTotal.toLocaleString()}*\n\n`
           grandTotal += tenantTotal
         }
-
         report += `_________________________\n⭐ *TOTAL DUE: ₹${grandTotal.toLocaleString()}*`
         await sendText(from, report)
       }
@@ -148,11 +131,7 @@ export async function POST(req) {
       }
 
       if (targetMonth) {
-        const { data: bills } = await supabase
-          .from('utility_bills')
-          .select(`fixed_rent, water_bill, total_amount, curr_reading, prev_reading, rate_per_unit, tenants (name, units (unit_number))`)
-          .eq('user_id', profile.id)
-          .eq('billing_month', targetMonth)
+        const { data: bills } = await supabase.from('utility_bills').select(`fixed_rent, water_bill, total_amount, curr_reading, prev_reading, rate_per_unit, tenants (name, units (unit_number))`).eq('user_id', profile.id).eq('billing_month', targetMonth)
 
         if (!bills?.length) {
           await sendText(from, `📭 No data for *${targetMonth}*.`)
@@ -172,6 +151,7 @@ export async function POST(req) {
         return NextResponse.json({ ok: true })
       }
 
+      // HANDLE READING INPUT: [Unit] [Reading]
       const parts = text.trim().split(/\s+/)
       if (parts.length === 2 && !isNaN(parseFloat(parts[1]))) {
         const unitNumber = parts[0].toUpperCase()
@@ -182,13 +162,15 @@ export async function POST(req) {
           const tenant = unit.tenants[0]
           const month = now.toISOString().slice(0, 7)
           const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', tenant.id).order('billing_month', { ascending: false }).limit(1).single()
+          
           const prevReading = last?.curr_reading || 0
           if (currentReading < prevReading) {
             await sendText(from, `❌ *Lower Reading Error*\nCurrent: ${currentReading} | Prev: ${prevReading}`)
             return NextResponse.json({ ok: true })
           }
 
-          const lightBill = Math.max((currentReading - prevReading) * 10, 150)
+          const energyUnits = currentReading - prevReading
+          const lightBill = Math.max(energyUnits * 10, 150)
           const total = parseFloat(unit.rent) + lightBill + 140
 
           await supabase.from('utility_bills').upsert({
@@ -199,7 +181,20 @@ export async function POST(req) {
           })
 
           const upi = profile.upi_id ? `upi://pay?pa=${profile.upi_id}&pn=${encodeURIComponent(profile.business_name)}&am=${total}&cu=INR` : ''
-          await sendText(from, `✅ *Saved for ${unitNumber}*\nTotal: ₹${total.toLocaleString()}\n\n${upi ? `📲 *PAY LINK:*\n${upi}\n` : ''}_Reply 'Menu' for more._`)
+          
+          const successMsg = `✅ *Recorded for ${unitNumber}*\n` +
+                             `👤 *Tenant:* ${tenant.name}\n` +
+                             `📟 *Reading:* ${prevReading} ➔ ${currentReading} (${energyUnits}u)\n` +
+                             `_________________________\n\n` +
+                             `▫️ Rent: ₹${parseFloat(unit.rent).toLocaleString()}\n` +
+                             `▫️ Light: ₹${lightBill.toLocaleString()}\n` +
+                             `▫️ Water: ₹140\n` +
+                             `💰 *TOTAL: ₹${total.toLocaleString()}*\n` +
+                             `_________________________\n\n` +
+                             (upi ? `📲 *PAY LINK:*\n${upi}\n` : '') +
+                             `_Reply 'Menu' for more._`
+          
+          await sendText(from, successMsg)
         } else {
           await sendText(from, `❌ Unit *${unitNumber}* not found.`)
         }
