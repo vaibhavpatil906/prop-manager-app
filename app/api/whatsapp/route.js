@@ -77,11 +77,14 @@ async function clearSession(phone) {
 // --- AI SEARCH HELPER ---
 async function handleAISearch(from, profileId, userQuery) {
   if (!process.env.GEMINI_API_KEY) {
-    console.error('AI Error: GEMINI_API_KEY is missing in environment variables.')
+    console.error('AI Error: GEMINI_API_KEY is missing.')
     return await sendText(from, "⚠️ AI Assistant is not configured. Please add the GEMINI_API_KEY to Vercel.")
   }
 
   try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" })
+
     // 1. Fetch current context from database
     const { data: tenants, error: tErr } = await supabase.from('tenants').select('name, status, unit_id, phone').eq('user_id', profileId)
     const { data: units, error: uErr } = await supabase.from('units').select('unit_number, rent, status, id').in('id', (tenants || []).map(t => t.unit_id))
