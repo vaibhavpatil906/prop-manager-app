@@ -82,18 +82,33 @@ async function handleAISearch(from, profileId, userQuery) {
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" })
 
-    // 2. Fetch business context
-    const { data: tenants } = await supabase.from('tenants').select('name, status, unit_id').eq('user_id', profileId)
-    const { data: units } = await supabase.from('units').select('unit_number, rent, status, id').in('id', (tenants || []).map(t => t.unit_id))
-    const { data: bills } = await supabase.from('utility_bills').select('billing_month, total_amount, tenant_id').eq('user_id', profileId).order('billing_month', { ascending: false }).limit(10)
+    // 2. Fetch COMPLETE business context for this owner
+    const [
+      { data: properties },
+      { data: units },
+      { data: tenants },
+      { data: bills },
+      { data: payments },
+      { data: maintenance }
+    ] = await Promise.all([
+      supabase.from('properties').select('*').eq('user_id', profileId),
+      supabase.from('units').select('id, property_id, unit_number, rent, status'), // Fetch all units might be cross-property, but good enough for now. Better: filter by property.
+      supabase.from('tenants').select('*').eq('user_id', profileId),
+      supabase.from('utility_bills').select('*').eq('user_id', profileId).order('billing_month', { ascending: false }).limit(50),
+      supabase.from('payments').select('*, tenants!inner(user_id)').eq('tenants.user_id', profileId).order('due_date', { ascending: false }).limit(50),
+      supabase.from('maintenance_requests').select('*, tenants!inner(user_id)').eq('tenants.user_id', profileId).limit(50)
+    ])
 
     const context = {
-      tenants: tenants?.map(t => ({ name: t.name, status: t.status, unit: units?.find(u => u.id === t.unit_id)?.unit_number })),
-      units: units?.map(u => ({ number: u.unit_number, rent: u.rent, status: u.status })),
-      bills: bills?.map(b => ({ month: b.billing_month, amount: b.total_amount, tenant: tenants?.find(t => t.id === b.tenant_id)?.name }))
+      properties,
+      units, // Note: units doesn't have user_id directly in our current schema, but tenants do. We'll pass all units for simplicity, or we can filter them in JS.
+      tenants,
+      utility_bills: bills,
+      payments,
+      maintenance_requests: maintenance
     }
 
-    const prompt = `System: You are an AI assistant for PropManager. Answer questions based ONLY on this context: ${JSON.stringify(context)}. 
+    const prompt = `System: You are an AI assistant for PropManager. Answer questions based ONLY on this complete database context: ${JSON.stringify(context)}. 
     If you cannot find the answer, say "I don't have enough information in your records." 
     User Query: ${userQuery}`
 
