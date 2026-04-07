@@ -11,25 +11,22 @@ async function callWhatsApp(to, messageData) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_ID
   
+  console.log(`Sending WhatsApp to ${to} using PhoneID ${phoneId}...`)
+
   if (!token || !phoneId) {
-    console.error('MISSING TOKENS:', { hasToken: !!token, hasPhoneId: !!phoneId })
+    console.error('CRITICAL: Missing WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_ID in Environment Variables.')
     return
   }
 
   try {
     const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
       method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${token}`, 
-        'Content-Type': 'application/json' 
-      },
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
     })
     
     const data = await res.json()
-    if (data.error) {
-      console.error('WHATSAPP API ERROR:', JSON.stringify(data.error))
-    }
+    console.log('Meta API Response:', JSON.stringify(data))
     return data
   } catch (e) {
     console.error('FETCH FAILED:', e)
@@ -70,31 +67,46 @@ async function clearSession(phone) {
 
 // --- MAIN BOT ---
 export async function POST(req) {
+  console.log('--- NEW INCOMING REQUEST ---')
   try {
     const body = await req.json()
+    console.log('Request Body:', JSON.stringify(body))
     
-    const changes = body.entry?.[0]?.changes?.[0]?.value
+    const entry = body.entry?.[0]
+    const changes = entry?.changes?.[0]?.value
     const message = changes?.messages?.[0]
-    if (!message) return NextResponse.json({ ok: true })
+    
+    if (!message) {
+      console.log('No message found in body. Ignoring.')
+      return NextResponse.json({ ok: true })
+    }
 
     const from = message.from
     const text = (message.text?.body || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "").trim()
     const listId = message.interactive?.list_reply?.id
     
+    console.log(`From: ${from}, Text: "${text}", ListID: ${listId}`)
+
     if (!from || !text) return NextResponse.json({ ok: true })
 
     const input = text.toLowerCase()
     const cleanPhone = from.replace(/\D/g, '')
 
     // 1. Auth Owner
-    const { data: profile } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
-    if (!profile) {
-      await sendText(from, `⚠️ Unauthorized Number: ${cleanPhone}. Please register in app settings.`)
+    console.log('Authenticating phone:', cleanPhone)
+    const { data: profile, error: pErr } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
+    
+    if (pErr || !profile) {
+      console.log('Auth Failed:', pErr?.message || 'Profile not found')
+      await sendText(from, `⚠️ Unauthorized Number: ${cleanPhone}. Please add to app settings.`)
       return NextResponse.json({ ok: true })
     }
 
+    console.log('Authenticated Profile:', profile.business_name)
+
     // 2. Main Menu / Global Commands
     if (['hi', 'hello', 'menu', 'start', 'cancel', 'back', 'hey'].includes(input) || listId === 'nav_main') {
+      console.log('Triggering Main Menu...')
       await clearSession(from)
       await sendListMenu(from, 
         `👋 PropManager Home`,
@@ -110,8 +122,9 @@ export async function POST(req) {
     }
 
     const session = await getSession(from)
+    console.log('Current Session Step:', session?.step || 'none')
 
-    // 3. Step-by-Step Paths
+    // 3. Step-by-Step Logic
     if (session) {
       if (session.step === 'awaiting_unit_reading') {
         const unitNum = text.toUpperCase()
@@ -154,7 +167,7 @@ export async function POST(req) {
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('tenant_id', session.tenant_id).eq('billing_month', month).single()
         if (bill) {
           const u = bill.curr_reading - bill.prev_reading; const l = Math.max(u * 10, 150); const upi = profile.upi_id ? `upi://pay?pa=${profile.upi_id}&pn=${encodeURIComponent(profile.business_name)}&am=${bill.total_amount}&cu=INR` : ''
-          await sendButtons(from, `🧾 *Bill: ${session.unit_num}*\n👤 ${session.tenant_name}\n📅 ${month}\n💰 Total: ₹${parseFloat(bill.total_amount).toLocaleString()}\n${upi ? `📲 *PAY LINK:*\n${upi}\n` : ''}`, ["Main Menu", "Get Unit Bill"])
+          await sendButtons(from, `🧾 *Bill: ${session.unit_num}*\n👤 ${session.tenant_name}\n💰 Total: ₹${parseFloat(bill.total_amount).toLocaleString()}\n${upi ? `📲 *PAY LINK:*\n${upi}\n` : ''}`, ["Main Menu", "Get Unit Bill"])
         }
         return await clearSession(from)
       }
@@ -172,11 +185,10 @@ export async function POST(req) {
     }
     if (listId === 'path_lookup' || input === 'get unit bill') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
-      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', tenants.map(t => t.unit_id))
+      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
       const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
       await updateSession(from, { step: 'awaiting_tenant_selection' })
-      return await sendListMenu(from, "🔍 Lookup", "Select tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+      return await sendListMenu(from, "🔍 Lookup", "Select tenant:", "Select", [{ title: "ACTIVE", rows: (tenants || []).map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
     if (listId === 'path_summary' || input === 'property summary') {
       const { data: props } = await supabase.from('properties').select('name, units').eq('user_id', profile.id)
@@ -195,8 +207,7 @@ export async function POST(req) {
       const { data: bills } = await supabase.from('utility_bills').select(`total_amount, billing_month, tenant_id`).eq('user_id', profile.id).order('billing_month', { ascending: false })
       if (!bills?.length) return await sendButtons(from, "✅ All paid!", ["Main Menu"])
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').in('id', bills.map(b => b.tenant_id))
-      const tIds = (tenants || []).map(t => t.id)
-      const { data: units } = tIds.length ? await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id)) : { data: [] }
+      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
       const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
       let r = `🚩 *Outstanding*\n\n`; let gt = 0; const grouped = bills.reduce((acc, b) => { const k = b.billing_month; acc[k] = acc[k] || []; acc[k].push(b); return acc }, {})
       for (const [month, mBills] of Object.entries(grouped)) {
@@ -209,7 +220,8 @@ export async function POST(req) {
     await sendText(from, "❓ Send *Hi* for menu.")
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error('CRITICAL ERROR:', err); return NextResponse.json({ ok: true })
+    console.error('CRITICAL SERVER ERROR:', err); 
+    return NextResponse.json({ ok: true })
   }
 }
 
