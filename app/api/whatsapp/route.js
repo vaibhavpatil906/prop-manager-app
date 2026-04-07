@@ -78,11 +78,11 @@ async function handleAISearch(from, profileId, userQuery) {
   }
 
   try {
-    // 1. Initialize Gemini with stable v1 API
+    // 1. Initialize Gemini with the new Preview Model
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" })
 
-    // 2. Fetch context
+    // 2. Fetch business context
     const { data: tenants } = await supabase.from('tenants').select('name, status, unit_id').eq('user_id', profileId)
     const { data: units } = await supabase.from('units').select('unit_number, rent, status, id').in('id', (tenants || []).map(t => t.unit_id))
     const { data: bills } = await supabase.from('utility_bills').select('billing_month, total_amount, tenant_id').eq('user_id', profileId).order('billing_month', { ascending: false }).limit(10)
@@ -93,25 +93,25 @@ async function handleAISearch(from, profileId, userQuery) {
       bills: bills?.map(b => ({ month: b.billing_month, amount: b.total_amount, tenant: tenants?.find(t => t.id === b.tenant_id)?.name }))
     }
 
-    const systemPrompt = `You are a PropManager Assistant. Answer questions based on this data: ${JSON.stringify(context)}. 
-    If unknown, say "I don't know." Be concise. Query: ${userQuery}`
+    const prompt = `System: You are an AI assistant for PropManager. Answer questions based ONLY on this context: ${JSON.stringify(context)}. 
+    If you cannot find the answer, say "I don't have enough information in your records." 
+    User Query: ${userQuery}`
 
-    const result = await model.generateContent(systemPrompt)
+    const result = await model.generateContent(prompt)
     const answer = result.response.text()
     
-    await sendText(from, `🤖 *AI Assistant*\n\n${answer}`)
+    await sendText(from, `🤖 *AI Assistant (Flash 3)*\n\n${answer}`)
   } catch (err) {
-    console.error('Gemini Error:', err)
-    // Fallback to gemini-pro if flash 404s
-    if (err.message?.includes('404')) {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey)
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" })
-        const result = await model.generateContent(`Data: ${userQuery}`)
-        return await sendText(from, `🤖 *AI Assistant (Legacy)*\n\n${result.response.text()}`)
-      } catch (e2) {}
+    console.error('Gemini 3 Error:', err)
+    // Fallback to gemini-1.5-flash if 3 isn't available yet in region
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey)
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+      const result = await model.generateContent(`Context: ${userQuery}`)
+      return await sendText(from, `🤖 *AI Assistant (Fallback)*\n\n${result.response.text()}`)
+    } catch (e2) {
+      await sendText(from, "⚠️ AI Assistant is currently unavailable. Error: " + err.message)
     }
-    await sendText(from, "⚠️ AI Assistant is currently unavailable.")
   }
 }
 
@@ -168,7 +168,7 @@ export async function POST(req) {
 
     const session = await getSession(from)
 
-    // 4. Session Steps (Manual Fallback)
+    // 4. Session Steps
     if (session) {
       if (session.step === 'awaiting_unit_reading') {
         const unitNum = text.toUpperCase()
