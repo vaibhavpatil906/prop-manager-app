@@ -53,7 +53,7 @@ export async function POST(req) {
       .single()
 
     if (pErr || !profile) {
-      await sendWhatsApp(from, "⚠️ *Unauthorized Number*\nPlease add this phone number to your PropManager 'Settings' to use the bot.")
+      await sendWhatsApp(from, `⚠️ *Unauthorized Number: ${cleanPhone}*\nPlease add this exact number to your PropManager 'Settings' to use the bot.`)
       return NextResponse.json({ ok: true })
     }
 
