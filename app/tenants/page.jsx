@@ -234,15 +234,22 @@ export default function Tenants() {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
               <thead>
                 <tr style={{ textAlign: 'left', background: TOKENS.bg }}>
-                  {['Cycle', 'Electricity', 'Water', 'Base Rent', 'Total Due', 'Status'].map(h => <th key={h} style={{ padding: '16px 20px', fontSize: 11, fontWeight: 950, color: TOKENS.slate, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</th>)}
+                  {['Cycle', 'Electricity', 'Water', 'Other', 'Base Rent', 'Total Due', 'Status'].map(h => <th key={h} style={{ padding: '16px 20px', fontSize: 11, fontWeight: 950, color: TOKENS.slate, textTransform: 'uppercase', letterSpacing: 1 }}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {tenantDetailModal.bills.length === 0 ? <tr><td colSpan="6" style={{padding:40, textAlign:'center', color: TOKENS.slate, fontWeight:700}}>No past financial activity.</td></tr> :
+                {tenantDetailModal.bills.length === 0 ? <tr><td colSpan="7" style={{padding:40, textAlign:'center', color: TOKENS.slate, fontWeight:700}}>No past financial activity.</td></tr> :
                  tenantDetailModal.bills.map(b => {
                   const energyUnits = Math.max(0, b.curr_reading - b.prev_reading)
-                  let energyBill = energyUnits * b.rate_per_unit
+                  let energyBill = energyUnits * (b.rate_per_unit || 10)
                   if (energyBill < 150) energyBill = 150
+                  
+                  const other = parseFloat(b.other_utilities || 0)
+                  const rent = parseFloat(b.fixed_rent || 0)
+                  const water = parseFloat(b.water_bill || 0)
+                  
+                  // Re-calculate total to ensure consistency with UI rules
+                  const calculatedTotal = rent + energyBill + water + other
                   
                   const payment = tenantDetailModal.payments.find(p => p.bill_id === b.id)
                   const status = payment?.status || (b.balance_due === 0 ? 'Paid' : 'Pending')
@@ -251,9 +258,10 @@ export default function Tenants() {
                     <tr key={b.id} style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
                       <td style={{ padding: '16px 20px', fontWeight: 950, color: TOKENS.dark }}>{b.billing_month}</td>
                       <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{energyBill.toLocaleString()} <span style={{fontSize:10, color: TOKENS.primary, fontWeight: 900}}>({energyUnits}u)</span></td>
-                      <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{parseFloat(b.water_bill || 0).toLocaleString()}</td>
-                      <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{parseFloat(b.fixed_rent || 0).toLocaleString()}</td>
-                      <td style={{ padding: '16px 20px', fontWeight: 950, color: TOKENS.primary, fontSize: 15 }}>₹{b.total_amount.toLocaleString()}</td>
+                      <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{water.toLocaleString()}</td>
+                      <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{other.toLocaleString()}</td>
+                      <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{rent.toLocaleString()}</td>
+                      <td style={{ padding: '16px 20px', fontWeight: 950, color: TOKENS.primary, fontSize: 15 }}>₹{calculatedTotal.toLocaleString()}</td>
                       <td style={{ padding: '16px 20px' }}>
                         <Badge label={status} />
                       </td>
