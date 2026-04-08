@@ -11,15 +11,15 @@ async function callWhatsApp(to, messageData) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_ID
   if (!token || !phoneId) return
-  return fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+  return await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
   })
 }
 
-const sendText = (to, text) => callWhatsApp(to, { type: "text", text: { body: text } })
-const sendButtons = (to, text, buttons) => callWhatsApp(to, {
+const sendText = async (to, text) => await callWhatsApp(to, { type: "text", text: { body: text } })
+const sendButtons = async (to, text, buttons) => await callWhatsApp(to, {
   type: "interactive",
   interactive: {
     type: "button",
@@ -27,7 +27,7 @@ const sendButtons = (to, text, buttons) => callWhatsApp(to, {
     action: { buttons: buttons.slice(0, 3).map((b, i) => ({ type: "reply", reply: { id: `btn_${i}`, title: b.substring(0, 20) } })) }
   }
 })
-const sendListMenu = (to, header, body, buttonLabel, sections) => callWhatsApp(to, {
+const sendListMenu = async (to, header, body, buttonLabel, sections) => await callWhatsApp(to, {
   type: "interactive",
   interactive: {
     type: "list",
@@ -71,8 +71,8 @@ export async function POST(req) {
     const listId = message.interactive?.list_reply?.id
     const input = text.toLowerCase()
 
-    // 2. Main Menu & Cancel
-    if (['hi', 'hello', 'menu', 'start', 'hey', 'cancel'].includes(input) || listId === 'nav_main') {
+    // 2. Main Menu & Reset
+    if (['hi', 'hello', 'menu', 'start', 'hey', 'cancel', 'reset'].includes(input) || listId === 'nav_main') {
       await clearSession(from)
       await sendListMenu(from, `👋 PropManager Home`, "Select an action:", "Menu", [
         { title: "⚡ RECORD", rows: [
@@ -85,125 +85,106 @@ export async function POST(req) {
       return NextResponse.json({ ok: true })
     }
 
-    // 3. Session Handling (Ongoing Tasks)
     const session = await getSession(from)
+
+    // 3. Handle Active Session Steps
     if (session) {
-      // --- Payment Recording Steps ---
+      // PAYMENT STEPS
       if (session.step === 'awaiting_payment_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
+        if (!tenantId) return NextResponse.json({ ok: true })
         const { data: bills } = await supabase.from('utility_bills').select('id, billing_month, balance_due').eq('tenant_id', tenantId).gt('balance_due', 0).order('billing_month', { ascending: false })
-        
         if (!bills?.length) {
           await clearSession(from)
-          return await sendButtons(from, "✅ This tenant has no pending balance.", ["Main Menu", "Record Payment"])
+          await sendButtons(from, "✅ This tenant has no pending balance.", ["Main Menu", "Record Payment"])
+          return NextResponse.json({ ok: true })
         }
-        
         await updateSession(from, { step: 'awaiting_bill_selection', tenant_id: tenantId })
-        return await sendListMenu(from, `💰 Select Bill`, "Which bill are they paying?", "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${b.balance_due})` })) }])
+        await sendListMenu(from, `💰 Select Bill`, "Which bill are they paying?", "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${b.balance_due})` })) }])
+        return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'awaiting_bill_selection') {
         const billId = listId?.replace('bill_', '')
+        if (!billId) return NextResponse.json({ ok: true })
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', billId).single()
         await updateSession(from, { step: 'awaiting_payment_amount', bill_id: billId, bill_total: bill.balance_due })
-        return await sendText(from, `💸 *Balance:* ₹${bill.balance_due}\nHow much was received?`)
+        await sendText(from, `💸 *Balance:* ₹${bill.balance_due}\nHow much was received?`)
+        return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'awaiting_payment_amount') {
         const amt = parseFloat(text)
-        if (isNaN(amt)) return await sendText(from, "❌ Please enter a number.")
-        
+        if (isNaN(amt)) {
+          await sendText(from, "❌ Please enter a valid number.")
+          return NextResponse.json({ ok: true })
+        }
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', session.bill_id).single()
         const newBalance = bill.balance_due - amt
-        
-        // 1. Mark existing pending payment as Paid
         const { data: pendPay } = await supabase.from('payments').select('id').eq('bill_id', session.bill_id).eq('status', 'Pending').limit(1).single()
-        if (pendPay) {
-          await supabase.from('payments').update({ amount: amt, status: 'Paid', payment_date: new Date() }).eq('id', pendPay.id)
-        }
-
-        // 2. Update Bill Balance
+        if (pendPay) await supabase.from('payments').update({ amount: amt, status: 'Paid', payment_date: new Date() }).eq('id', pendPay.id)
         await supabase.from('utility_bills').update({ balance_due: Math.max(0, newBalance) }).eq('id', session.bill_id)
-
-        // 3. Create new lookup if partial
-        if (newBalance > 0) {
-          await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBalance, status: 'Pending', method: 'Partial Balance', due_date: bill.due_date })
-        }
-
+        if (newBalance > 0) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBalance, status: 'Pending', method: 'Partial Balance', due_date: bill.due_date })
         await clearSession(from)
-        return await sendButtons(from, `✅ *Payment Recorded*\n💰 Received: ₹${amt}\n🚩 Remaining: ₹${Math.max(0, newBalance)}`, ["Main Menu", "Record Payment"])
+        await sendButtons(from, `✅ *Payment Recorded*\n💰 Received: ₹${amt}\n🚩 Remaining: ₹${Math.max(0, newBalance)}`, ["Main Menu", "Record Payment"])
+        return NextResponse.json({ ok: true })
       }
-      // --- Reading Submission Steps ---
+
+      // READING STEPS
       if (session.step === 'awaiting_unit_reading') {
         const unitNum = text.toUpperCase()
         const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', unitNum).single()
-        if (!unit?.tenants?.[0]) return await sendText(from, `❌ Unit *${unitNum}* not found or has no tenant.`)
-        
+        if (!unit?.tenants?.[0]) {
+          await sendText(from, `❌ Unit *${unitNum}* not found or has no tenant.`)
+          return NextResponse.json({ ok: true })
+        }
         const tenant = unit.tenants[0]
         const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', tenant.id).order('billing_month', { ascending: false }).limit(1).single()
-        
         await updateSession(from, { step: 'awaiting_reading_value', unit_id: unit.id, unit_num: unitNum, tenant_name: tenant.name, tenant_id: tenant.id, prev_reading: last?.curr_reading || 0, rent: unit.rent })
-        return await sendText(from, `👤 *Tenant:* ${tenant.name}\n📟 *Previous:* ${last?.curr_reading || 0}\n\nWhat is the *Current Reading*? (Reply 'cancel' to stop)`)
+        await sendText(from, `👤 *Tenant:* ${tenant.name}\n📟 *Previous:* ${last?.curr_reading || 0}\n\nWhat is the *Current Reading*?`)
+        return NextResponse.json({ ok: true })
       }
-      
+
       if (session.step === 'awaiting_reading_value') {
         const curr = parseFloat(text)
-        if (isNaN(curr)) return await sendText(from, "❌ Please send a valid number.")
+        if (isNaN(curr)) {
+          await sendText(from, "❌ Please enter a valid number.")
+          return NextResponse.json({ ok: true })
+        }
         await updateSession(from, { step: 'awaiting_water_value', curr_reading: curr })
-        return await sendButtons(from, `📟 *Current:* ${curr}`, ["Skip (140)", "Enter Custom"])
+        await sendButtons(from, `📟 *Current:* ${curr}`, ["Skip (140)", "Enter Custom"])
+        return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'awaiting_water_value') {
-        if (input === 'enter custom') return await sendText(from, "Type water amount:")
+        if (input === 'enter custom') {
+          await sendText(from, "Type water amount:")
+          return NextResponse.json({ ok: true })
+        }
         const water = input === 'skip (140)' ? 140 : parseFloat(text)
-        if (isNaN(water)) return await sendText(from, "❌ Please send a valid number.")
-        
         const unitsUsed = session.curr_reading - session.prev_reading
         const elec = Math.max(unitsUsed * 10, 150)
         const total = parseFloat(session.rent) + elec + water
-        
-        // 1. Create the Bill
-        const { data: bill, error: billErr } = await supabase.from('utility_bills').upsert({ 
-          user_id: profile.id, 
-          tenant_id: session.tenant_id, 
-          billing_month: new Date().toISOString().slice(0, 7), 
-          prev_reading: session.prev_reading, 
-          curr_reading: session.curr_reading, 
-          rate_per_unit: 10, 
-          fixed_rent: session.rent, 
-          water_bill: water, 
-          total_amount: total,
-          balance_due: total, // Track remaining balance
-          due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] 
-        }).select().single()
-
-        if (!billErr && bill) {
-          // 2. Create the linked Payment record (Status: Pending)
-          await supabase.from('payments').insert({
-            tenant_id: session.tenant_id,
-            bill_id: bill.id,
-            amount: total,
-            status: 'Pending',
-            method: 'Utility Bill',
-            due_date: bill.due_date
-          })
-        }
-
+        const { data: bill, error: billErr } = await supabase.from('utility_bills').upsert({ user_id: profile.id, tenant_id: session.tenant_id, billing_month: new Date().toISOString().slice(0, 7), prev_reading: session.prev_reading, curr_reading: session.curr_reading, rate_per_unit: 10, fixed_rent: session.rent, water_bill: water, total_amount: total, balance_due: total, due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] }).select().single()
+        if (!billErr && bill) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: bill.id, amount: total, status: 'Pending', method: 'Utility Bill', due_date: bill.due_date })
         await clearSession(from)
-        return await sendButtons(from, `✅ *Bill Generated & Linked*\n🏠 Unit: ${session.unit_num}\n💰 Total: ₹${total.toLocaleString()}\n💳 Status: Pending Payment`, ["Main Menu", "Submit Reading"])
+        await sendButtons(from, `✅ *Bill Saved*\n💰 Total: ₹${total.toLocaleString()}`, ["Main Menu", "Submit Reading"])
+        return NextResponse.json({ ok: true })
       }
 
-      // --- Bill Lookup Steps ---
+      // LOOKUP STEPS
       if (session.step === 'awaiting_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         if (!tenantId) return NextResponse.json({ ok: true })
         const { data: bills } = await supabase.from('utility_bills').select('billing_month').eq('tenant_id', tenantId).order('billing_month', { ascending: false }).limit(5)
         if (!bills?.length) {
           await clearSession(from)
-          return await sendButtons(from, `📭 No history found.`, ["Main Menu", "Get Unit Bill"])
+          await sendButtons(from, `📭 No history found.`, ["Main Menu", "Get Unit Bill"])
+          return NextResponse.json({ ok: true })
         }
         await updateSession(from, { step: 'awaiting_month_selection', tenant_id: tenantId })
-        return await sendListMenu(from, `📅 Select Month`, "Choose:", "Select", [{ title: "MONTHS", rows: bills.map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
+        await sendListMenu(from, `📅 Select Month`, "Choose month:", "Select", [{ title: "MONTHS", rows: bills.map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
+        return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'awaiting_month_selection') {
@@ -213,112 +194,94 @@ export async function POST(req) {
         if (bill) {
           const detail = `🧾 *Bill Breakdown (${month})*\n\n🏠 *Rent:* ₹${parseFloat(bill.fixed_rent).toLocaleString()}\n⚡ *Elec:* ₹${Math.max((bill.curr_reading - bill.prev_reading) * 10, 150).toLocaleString()}\n💧 *Water:* ₹${parseFloat(bill.water_bill).toLocaleString()}\n_________________________\n💰 *TOTAL: ₹${parseFloat(bill.total_amount).toLocaleString()}*`
           await clearSession(from)
-          return await sendButtons(from, detail, ["Main Menu", "Get Unit Bill"])
+          await sendButtons(from, detail, ["Main Menu", "Get Unit Bill"])
         }
         return NextResponse.json({ ok: true })
       }
 
-      // --- Monthly Report Step ---
       if (session.step === 'awaiting_report_month_selection') {
         const monthCode = listId?.replace('report_', '')
         if (!monthCode) return NextResponse.json({ ok: true })
-        
         const { data: bills } = await supabase.from('utility_bills').select('*').eq('user_id', profile.id).eq('billing_month', monthCode)
         if (!bills?.length) {
           await clearSession(from)
-          return await sendButtons(from, `📭 No data for ${monthCode}`, ["Main Menu", "Monthly Report"])
+          await sendButtons(from, `📭 No data for ${monthCode}`, ["Main Menu", "Monthly Report"])
+          return NextResponse.json({ ok: true })
         }
-        
         const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').in('id', bills.map(b => b.tenant_id))
         const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
-        const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name]))
-        const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
-        
+        const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
         let r = `📊 *Report: ${monthCode}*\n\n`; let gt = 0
-        bills.forEach(b => {
-          const t = parseFloat(b.total_amount)
-          r += `🏠 *${uMap[b.tenant_id]}* (${tMap[b.tenant_id]}): ₹${t.toLocaleString()}\n`
-          gt += t
-        })
-        
+        bills.forEach(b => { const t = parseFloat(b.total_amount); r += `🏠 *${uMap[b.tenant_id]}* (${tMap[b.tenant_id]}): ₹${t.toLocaleString()}\n`; gt += t })
         await clearSession(from)
-        return await sendButtons(from, r + `\n⭐ *TOTAL: ₹${gt.toLocaleString()}*`, ["Main Menu", "Monthly Report"])
+        await sendButtons(from, r + `\n⭐ *TOTAL: ₹${gt.toLocaleString()}*`, ["Main Menu", "Monthly Report"])
+        return NextResponse.json({ ok: true })
       }
     }
 
-    // 4. Initial Triggers (Start of flows)
+    // 4. Initial Triggers
     if (listId === 'path_reading' || input === 'submit reading') {
       await updateSession(from, { step: 'awaiting_unit_reading' })
-      return await sendText(from, "📝 Which Unit? (e.g. G01)")
+      await sendText(from, "📝 Which Unit? (e.g. G01)")
+      return NextResponse.json({ ok: true })
     }
 
     if (listId === 'path_pay_rec' || input === 'record payment') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
+      if (!tenants?.length) {
+        await sendText(from, "🏠 No active tenants.")
+        return NextResponse.json({ ok: true })
+      }
       const { data: units } = await supabase.from('units').select('id, unit_number').in('id', tenants.map(t => t.unit_id))
       const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
       await updateSession(from, { step: 'awaiting_payment_tenant_selection' })
-      return await sendListMenu(from, "💰 Record Payment", "Which tenant is paying?", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+      await sendListMenu(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+      return NextResponse.json({ ok: true })
     }
     
     if (listId === 'path_lookup' || input === 'get unit bill') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
+      if (!tenants?.length) {
+        await sendText(from, "🏠 No active tenants.")
+        return NextResponse.json({ ok: true })
+      }
       const { data: units } = await supabase.from('units').select('id, unit_number').in('id', tenants.map(t => t.unit_id))
       const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
       await updateSession(from, { step: 'awaiting_tenant_selection' })
-      return await sendListMenu(from, "🔍 Select Tenant", "Choose:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+      await sendListMenu(from, "🔍 Select Tenant", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+      return NextResponse.json({ ok: true })
     }
 
     if (listId === 'path_summary' || input === 'property summary') {
       const { data: props } = await supabase.from('properties').select('name, units').eq('user_id', profile.id)
-      return await sendButtons(from, props?.length ? `🏢 *Properties:*\n` + props.map(p => `• ${p.name}: ${p.units}u`).join('\n') : "🏠 No properties.", ["Main Menu"])
+      await sendButtons(from, props?.length ? `🏢 *Properties:*\n` + props.map(p => `• ${p.name}: ${p.units}u`).join('\n') : "🏠 No properties.", ["Main Menu"])
+      return NextResponse.json({ ok: true })
     }
 
     if (listId === 'path_monthly' || input === 'monthly report') {
-      const rows = []
-      for (let i = 0; i < 6; i++) {
-        const d = new Date()
-        d.setMonth(d.getMonth() - i)
-        rows.push({ id: `report_${d.toISOString().slice(0, 7)}`, title: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) })
-      }
+      const rows = []; for (let i = 0; i < 6; i++) { const d = new Date(); d.setMonth(d.getMonth() - i); rows.push({ id: `report_${d.toISOString().slice(0, 7)}`, title: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) }) }
       await updateSession(from, { step: 'awaiting_report_month_selection' })
-      return await sendListMenu(from, "📅 Monthly Report", "Select month:", "Select", [{ title: "MONTHS", rows }])
+      await sendListMenu(from, "📅 Monthly Report", "Select month:", "Select", [{ title: "MONTHS", rows }])
+      return NextResponse.json({ ok: true })
     }
 
-    // 5. Action Fallbacks (Direct Response)
     if (listId === 'path_unpaid' || input === 'unpaid bills') {
-      const { data: bills } = await supabase.from('utility_bills')
-        .select(`id, total_amount, balance_due, billing_month, tenant_id`)
-        .eq('user_id', profile.id)
-        .gt('balance_due', 0)
-        .order('billing_month', { ascending: false })
-
-      if (!bills?.length) return await sendButtons(from, "✅ All bills are fully paid!", ["Main Menu"])
-      
+      const { data: bills } = await supabase.from('utility_bills').select(`total_amount, balance_due, billing_month, tenant_id`).eq('user_id', profile.id).gt('balance_due', 0).order('billing_month', { ascending: false })
+      if (!bills?.length) {
+        await sendButtons(from, "✅ All paid!", ["Main Menu"])
+        return NextResponse.json({ ok: true })
+      }
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').in('id', bills.map(b => b.tenant_id))
       const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
-      
-      const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name]))
-      const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
-      
-      let r = `🚩 *Outstanding Bills*\n\n`; let gt = 0
-      const grouped = bills.reduce((acc, b) => { acc[b.billing_month] = acc[b.billing_month] || []; acc[b.billing_month].push(b); return acc }, {})
-      
-      for (const [month, mBills] of Object.entries(grouped)) {
-        r += `📅 *${month}*\n`
-        mBills.forEach(b => {
-          r += `▫️ ${uMap[b.tenant_id]} (${tMap[b.tenant_id]}): ₹${parseFloat(b.balance_due).toLocaleString()}\n`
-          gt += parseFloat(b.balance_due)
-        })
-        r += `\n`
-      }
-      
-      return await sendButtons(from, r + `⭐ *TOTAL DUE: ₹${gt.toLocaleString()}*`, ["Main Menu", "Record Payment"])
+      const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
+      let r = `🚩 *Outstanding*\n\n`; const grouped = bills.reduce((acc, b) => { acc[b.billing_month] = acc[b.billing_month] || []; acc[b.billing_month].push(b); return acc }, {})
+      for (const [month, mBills] of Object.entries(grouped)) { r += `📅 *${month}*\n`; mBills.forEach(b => { r += `▫️ ${uMap[b.tenant_id]} (${tMap[b.tenant_id]}): ₹${parseFloat(b.balance_due).toLocaleString()}\n` }); r += `\n` }
+      await sendButtons(from, r, ["Main Menu", "Record Payment"])
+      return NextResponse.json({ ok: true })
     }
 
-    // 6. Generic Help
-    await sendText(from, "❓ Sorry, I didn't understand that. Please send *Hi* to see the menu.")
+    // 5. Catch-all
+    await sendText(from, "❓ Send *Hi* for menu.")
     return NextResponse.json({ ok: true })
 
   } catch (err) {

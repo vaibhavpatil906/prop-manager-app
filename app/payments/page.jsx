@@ -123,9 +123,29 @@ export default function Payments() {
     if (!form.tenant_id || !form.amount) return
     setSaving(true)
     try {
-      const payload = { ...form, amount: parseFloat(form.amount) }
-      if (modal === 'new') await supabase.from('payments').insert([payload])
-      else await supabase.from('payments').update(payload).eq('id', modal.id)
+      const amt = parseFloat(form.amount)
+      const payload = { ...form, amount: amt }
+      
+      if (modal !== 'new' && modal.id) {
+        if (modal.bill_id) {
+          const { data: bill } = await supabase.from('utility_bills').select('balance_due, due_date').eq('id', modal.bill_id).single()
+          const newBalance = (bill.balance_due || modal.amount) - amt
+          
+          await supabase.from('payments').update({ amount: amt, status: 'Paid', paid_date: new Date().toISOString().split('T')[0] }).eq('id', modal.id)
+          await supabase.from('utility_bills').update({ balance_due: Math.max(0, newBalance) }).eq('id', modal.bill_id)
+          
+          if (newBalance > 0) {
+            await supabase.from('payments').insert([{
+              tenant_id: modal.tenant_id, bill_id: modal.bill_id, amount: newBalance,
+              status: 'Pending', method: 'Partial Balance', due_date: bill.due_date
+            }])
+          }
+        } else {
+          await supabase.from('payments').update(payload).eq('id', modal.id)
+        }
+      } else {
+        await supabase.from('payments').insert([payload])
+      }
       fetchAll(); setModal(null)
     } catch (err) { alert(err.message) }
     setSaving(false)
