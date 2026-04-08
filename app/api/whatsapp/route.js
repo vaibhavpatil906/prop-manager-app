@@ -288,13 +288,33 @@ export async function POST(req) {
 
     // 5. Action Fallbacks (Direct Response)
     if (listId === 'path_unpaid' || input === 'unpaid bills') {
-      const { data: bills } = await supabase.from('utility_bills').select(`total_amount, billing_month, tenant_id`).eq('user_id', profile.id).order('billing_month', { ascending: false }).limit(10)
-      if (!bills?.length) return await sendButtons(from, "✅ All Paid.", ["Main Menu"])
+      const { data: bills } = await supabase.from('utility_bills')
+        .select(`id, total_amount, balance_due, billing_month, tenant_id`)
+        .eq('user_id', profile.id)
+        .gt('balance_due', 0)
+        .order('billing_month', { ascending: false })
+
+      if (!bills?.length) return await sendButtons(from, "✅ All bills are fully paid!", ["Main Menu"])
+      
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').in('id', bills.map(b => b.tenant_id))
       const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
-      const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
-      let r = `🚩 Outstanding Bills:\n\n`; bills.forEach(b => { r += `▫️ ${uMap[b.tenant_id]}: ₹${parseFloat(b.total_amount).toLocaleString()}\n` })
-      return await sendButtons(from, r, ["Main Menu"])
+      
+      const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name]))
+      const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
+      
+      let r = `🚩 *Outstanding Bills*\n\n`; let gt = 0
+      const grouped = bills.reduce((acc, b) => { acc[b.billing_month] = acc[b.billing_month] || []; acc[b.billing_month].push(b); return acc }, {})
+      
+      for (const [month, mBills] of Object.entries(grouped)) {
+        r += `📅 *${month}*\n`
+        mBills.forEach(b => {
+          r += `▫️ ${uMap[b.tenant_id]} (${tMap[b.tenant_id]}): ₹${parseFloat(b.balance_due).toLocaleString()}\n`
+          gt += parseFloat(b.balance_due)
+        })
+        r += `\n`
+      }
+      
+      return await sendButtons(from, r + `⭐ *TOTAL DUE: ₹${gt.toLocaleString()}*`, ["Main Menu", "Record Payment"])
     }
 
     // 6. Generic Help
