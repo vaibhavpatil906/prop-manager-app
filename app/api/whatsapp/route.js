@@ -95,25 +95,32 @@ export async function POST(req) {
 
     const session = await getSession(from)
 
-    // 3. Active Session Steps
+    // 3. Handle Active Session Steps
     if (session) {
       // PAYMENT FLOW
       if (session.step === 'awaiting_payment_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
+        if (!tenantId) return ok()
+        
         const { data: tenant } = await supabase.from('tenants').select('name, unit:units(unit_number)').eq('id', tenantId).single()
         const { data: bills } = await supabase.from('utility_bills').select('id, billing_month, balance_due').eq('tenant_id', tenantId).gt('balance_due', 0).order('billing_month', { ascending: false })
+        
+        const tName = tenant?.name || "Resident"
+        
         if (!bills?.length) {
-          await clearSession(from); return await sendButtons(from, `✅ ${tenant?.name} has no pending bills.`, ["Main Menu"])
+          await clearSession(from); return await sendButtons(from, `✅ *${tName}* has no pending bills.`, ["Main Menu"])
         }
-        await updateSession(from, { step: 'awaiting_bill_selection', tenant_id: tenantId, tenant_name: tenant?.name, unit_num: tenant?.unit?.unit_number })
-        return await sendListMenu(from, `💰 Select Bill`, "Choose month:", "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${fmt(b.balance_due)})` })) }])
+        await updateSession(from, { step: 'awaiting_bill_selection', tenant_id: tenantId, tenant_name: tName, unit_num: tenant?.unit?.unit_number })
+        return await sendListMenu(from, `💰 Select Bill`, `Bills for ${tName}:`, "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${fmt(b.balance_due)})` })) }])
       }
 
       if (session.step === 'awaiting_bill_selection') {
         const billId = listId?.replace('bill_', '')
+        if (!billId) return ok()
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', billId).single()
+        if (!bill) return await sendText(from, "❌ Bill not found.")
         await updateSession(from, { step: 'awaiting_payment_amount', bill_id: billId, bill_month: bill.billing_month })
-        return await sendText(from, `💸 Pending: ₹${fmt(bill.balance_due)}. How much received?`)
+        return await sendText(from, `💸 Pending for *${bill.billing_month}*: ₹${fmt(bill.balance_due)}. How much received?`)
       }
 
       if (session.step === 'awaiting_payment_amount') {
@@ -130,13 +137,16 @@ export async function POST(req) {
         await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: amt, status: 'Paid', method, payment_date: new Date(), due_date: bill?.due_date })
         await supabase.from('utility_bills').update({ balance_due: newBal }).eq('id', session.bill_id)
         if (newBal > 0) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBal, status: 'Pending', method: 'Partial Balance', due_date: bill?.due_date })
-        await clearSession(from); return await sendButtons(from, `✅ Payment Saved!\n🚩 Remaining: ₹${fmt(newBal)}`, ["Main Menu", "Record Payment"])
+        
+        await clearSession(from)
+        const receipt = `✅ *Payment Recorded*\n👤 *Resident:* ${session.tenant_name}\n🚩 *Remaining:* ₹${fmt(newBal)}`
+        return await sendButtons(from, receipt, ["Main Menu", "Record Payment"])
       }
 
       // READING FLOW
       if (session.step === 'awaiting_unit_reading') {
         const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', text.toUpperCase()).single()
-        if (!unit || !unit.tenants?.[0]) return await sendText(from, `❌ Unit not found or empty.`)
+        if (!unit || !unit.tenants?.[0]) return await sendText(from, `❌ Unit *${text.toUpperCase()}* not found or empty.`)
         const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', unit.tenants[0].id).order('billing_month', { ascending: false }).limit(1).single()
         await updateSession(from, { step: 'awaiting_reading_value', tenant_id: unit.tenants[0].id, tenant_name: unit.tenants[0].name, prev_reading: last?.curr_reading || 0, rent: unit.rent, unit_num: text.toUpperCase() })
         return await sendText(from, `👤 Resident: ${unit.tenants[0].name}. What is current reading?`)
@@ -157,7 +167,7 @@ export async function POST(req) {
         const month = new Date().toISOString().slice(0, 7)
         const { data: bill } = await supabase.from('utility_bills').upsert({ user_id: profile.id, tenant_id: session.tenant_id, billing_month: month, prev_reading: session.prev_reading, curr_reading: session.curr_reading, rate_per_unit: 10, fixed_rent: session.rent, water_bill: water, total_amount: total, balance_due: total, due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] }).select().single()
         if (bill) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: bill.id, amount: total, status: 'Pending', method: 'Utility Bill', due_date: bill.due_date })
-        await clearSession(from); return await sendButtons(from, `✅ Bill Saved!\n💰 Total: ₹${fmt(total)}`, ["Main Menu", "Submit Reading"])
+        await clearSession(from); return await sendButtons(from, `✅ Bill Saved for ${session.tenant_name}!\n💰 Total: ₹${fmt(total)}`, ["Main Menu", "Submit Reading"])
       }
     }
 
@@ -171,14 +181,14 @@ export async function POST(req) {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
       if (!tenants?.length) return await sendText(from, "🏠 No active residents.")
       await updateSession(from, { step: 'awaiting_payment_tenant_selection' })
-      return await sendListMenu(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}` })) }])
+      return await sendListMenu(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
     
     if (listId === 'path_lookup' || input === 'get unit bill') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
       if (!tenants?.length) return await sendText(from, "🏠 No active residents.")
       await updateSession(from, { step: 'awaiting_tenant_selection' })
-      return await sendListMenu(from, "🔍 Select Tenant", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}` })) }])
+      return await sendListMenu(from, "🔍 Select Tenant", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
 
     if (listId === 'path_unpaid' || input === 'unpaid bills') {
