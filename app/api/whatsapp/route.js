@@ -44,7 +44,8 @@ async function getSession(phone) {
   return data
 }
 async function updateSession(phone, data) {
-  await supabase.from('bot_sessions').upsert({ phone, ...data, updated_at: new Date() })
+  const { error } = await supabase.from('bot_sessions').upsert({ phone, ...data, updated_at: new Date() })
+  if (error) console.error('Session Update Error:', error)
 }
 async function clearSession(phone) {
   await supabase.from('bot_sessions').delete().eq('phone', phone)
@@ -63,7 +64,7 @@ export async function POST(req) {
     // 1. Auth check
     const { data: profile } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
     if (!profile) {
-      await sendText(from, `⚠️ Unauthorized: ${cleanPhone}`)
+      await sendText(from, `⚠️ Unauthorized Number: ${cleanPhone}`)
       return NextResponse.json({ ok: true })
     }
 
@@ -117,7 +118,10 @@ export async function POST(req) {
 
       if (session.step === 'awaiting_payment_amount') {
         const amt = parseFloat(text)
-        if (isNaN(amt)) return await sendText(from, "❌ Please enter a valid number.")
+        if (isNaN(amt)) {
+          await sendText(from, "❌ Please enter a valid number (e.g., 5000).")
+          return NextResponse.json({ ok: true })
+        }
         await updateSession(from, { step: 'awaiting_payment_method', payment_amt: amt })
         await sendButtons(from, `💰 Received: ₹${amt.toLocaleString()}\n\nSelect payment method:`, ["Cash", "UPI", "Bank Transfer"])
         return NextResponse.json({ ok: true })
@@ -130,8 +134,8 @@ export async function POST(req) {
         const newBalance = bill.balance_due - amt
         
         const { data: pendPay } = await supabase.from('payments').select('id').eq('bill_id', session.bill_id).eq('status', 'Pending').limit(1).single()
-        if (pendPay) await supabase.from('payments').update({ amount: amt, status: 'Paid', method: method, payment_date: new Date() }).eq('id', pendPay.id)
-        else await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: amt, status: 'Paid', method: method, payment_date: new Date(), due_date: bill.due_date })
+        if (pendPay) await supabase.from('payments').update({ amount: amt, status: 'Paid', method: method, payment_date: new Date(), paid_date: new Date().toISOString().split('T')[0] }).eq('id', pendPay.id)
+        else await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: amt, status: 'Paid', method: method, payment_date: new Date(), paid_date: new Date().toISOString().split('T')[0], due_date: bill.due_date })
 
         await supabase.from('utility_bills').update({ balance_due: Math.max(0, newBalance) }).eq('id', session.bill_id)
         if (newBalance > 0) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBalance, status: 'Pending', method: 'Partial Balance', due_date: bill.due_date })
@@ -167,14 +171,20 @@ export async function POST(req) {
 
       if (session.step === 'awaiting_reading_value') {
         const curr = parseFloat(text)
-        if (isNaN(curr)) return await sendText(from, "❌ Please send a valid number.")
+        if (isNaN(curr)) {
+          await sendText(from, "❌ Please enter a valid number.")
+          return NextResponse.json({ ok: true })
+        }
         await updateSession(from, { step: 'awaiting_water_value', curr_reading: curr })
-        await sendButtons(from, `📟 *Current:* ${curr}`, ["Skip (140)", "Enter Custom"])
+        await sendButtons(from, `📟 *Current:* ${curr}\n\nWhat is the Water Bill?`, ["Skip (140)", "Enter Custom"])
         return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'awaiting_water_value') {
-        if (input === 'enter custom') return await sendText(from, "Type water amount:")
+        if (input === 'enter custom') {
+          await sendText(from, "Type water amount:")
+          return NextResponse.json({ ok: true })
+        }
         const water = input === 'skip (140)' ? 140 : parseFloat(text)
         const unitsUsed = session.curr_reading - session.prev_reading
         const elec = Math.max(unitsUsed * 10, 150)
@@ -231,14 +241,20 @@ export async function POST(req) {
 
     if (listId === 'path_pay_rec' || input === 'record payment') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
+      if (!tenants?.length) {
+        await sendText(from, "🏠 No active tenants.")
+        return NextResponse.json({ ok: true })
+      }
       await updateSession(from, { step: 'awaiting_payment_tenant_selection' })
       return await sendListMenu(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
     
     if (listId === 'path_lookup' || input === 'get unit bill') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
+      if (!tenants?.length) {
+        await sendText(from, "🏠 No active tenants.")
+        return NextResponse.json({ ok: true })
+      }
       await updateSession(from, { step: 'awaiting_tenant_selection' })
       return await sendListMenu(from, "🔍 Select Tenant", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
@@ -258,7 +274,10 @@ export async function POST(req) {
 
     if (listId === 'path_unpaid' || input === 'unpaid bills') {
       const { data: bills } = await supabase.from('utility_bills').select(`total_amount, balance_due, billing_month, tenant_id`).eq('user_id', profile.id).gt('balance_due', 0).order('billing_month', { ascending: false })
-      if (!bills?.length) return await sendButtons(from, "✅ All paid!", ["Main Menu"])
+      if (!bills?.length) {
+        await sendButtons(from, "✅ All paid!", ["Main Menu"])
+        return NextResponse.json({ ok: true })
+      }
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
       const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || 'Unit']))
       let r = `🚩 *Outstanding*\n\n`; const grouped = bills.reduce((acc, b) => { acc[b.billing_month] = acc[b.billing_month] || []; acc[b.billing_month].push(b); return acc }, {})
