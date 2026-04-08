@@ -7,6 +7,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder'
 )
 
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY?.trim() || "")
+
 // --- WHATSAPP HELPERS ---
 async function callWhatsApp(to, messageData) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN
@@ -51,38 +53,35 @@ async function clearSession(phone) {
   await supabase.from('bot_sessions').delete().eq('phone', phone)
 }
 
-// --- AI ENGINE WITH STABLE V1 API ---
+// --- AI ENGINE (STABLE VERSION) ---
 async function handleAISearch(from, profileId, userQuery) {
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY?.trim()
   if (!apiKey) return await sendText(from, "⚠️ AI Key Missing in Vercel.")
 
-  try {
-    // Force stable v1 API and try the standard model name
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+  // Using the most widely supported model IDs to resolve 404 errors
+  const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
 
-    // 1. Fetch Basic Context
-    const { data: tenants } = await supabase.from('tenants').select('name, unit_id').eq('user_id', profileId)
-    const { data: units } = await supabase.from('units').select('id, unit_number, rent')
-    const context = (tenants || []).map(t => {
-      const u = (units || []).find(un => un.id === t.unit_id)
-      return `${t.name} is in unit ${u?.unit_number || 'Unknown'}`
-    }).join('. ')
+  // 1. Fetch Basic Context
+  const { data: tenants } = await supabase.from('tenants').select('name, unit_id').eq('user_id', profileId)
+  const { data: units } = await supabase.from('units').select('id, unit_number, rent')
+  const context = (tenants || []).map(t => {
+    const u = (units || []).find(un => un.id === t.unit_id)
+    return `${t.name} is in unit ${u?.unit_number || 'Unknown'}`
+  }).join('. ')
 
-    const prompt = `System: Property Assistant. Records: ${context || 'None'}. Answer this concisely: ${userQuery}`
+  const prompt = `System: Property Assistant. Records: ${context || 'None'}. Answer concisely: ${userQuery}`
 
-    const result = await model.generateContent(prompt)
-    const aiResponse = result.response.text()
-    
-    await sendText(from, `🤖 *AI Assistant*\n\n${aiResponse}`)
-  } catch (err) {
-    console.error('AI Error Detail:', err)
-    
-    // If it's a 404, suggest checking the API Key dashboard
-    if (err.message?.includes('404') || err.message?.includes('not found')) {
-      await sendText(from, "🤖 *AI Config Error*: The AI model was not found. Please ensure your API Key from Google AI Studio is active and 'Generative Language API' is enabled.")
-    } else {
-      await sendText(from, `🤖 *AI Error*: ${err.message?.substring(0, 100)}`)
+  for (const modelName of modelsToTry) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName })
+      const result = await model.generateContent(prompt)
+      const aiResponse = result.response.text()
+      return await sendText(from, `🤖 *AI Assistant*\n\n${aiResponse}`)
+    } catch (err) {
+      console.error(`AI Error with ${modelName}:`, err.message)
+      if (modelName === modelsToTry[modelsToTry.length - 1]) {
+        await sendText(from, "🤖 *AI Error*: Could not find a supported model. Please ensure the 'Generative Language API' is enabled for your key.")
+      }
     }
   }
 }
@@ -100,7 +99,7 @@ export async function POST(req) {
     // 1. Auth check
     const { data: profile } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
     if (!profile) {
-      await sendText(from, `⚠️ Unauthorized Number: ${cleanPhone}`)
+      await sendText(from, `⚠️ Unauthorized: ${cleanPhone}`)
       return NextResponse.json({ ok: true })
     }
 
@@ -111,8 +110,8 @@ export async function POST(req) {
     // 2. Main Menu
     if (['hi', 'hello', 'menu', 'start', 'hey'].includes(input) || listId === 'nav_main') {
       await clearSession(from)
-      await sendListMenu(from, `👋 PropManager Home`, "Select an action:", "Open Menu", [
-        { title: "⚡ ACTIONS", rows: [{ id: "path_reading", title: "Submit Reading" }] },
+      await sendListMenu(from, `👋 PropManager Home`, "Select an action:", "Menu", [
+        { title: "⚡ RECORD", rows: [{ id: "path_reading", title: "Submit Reading" }] },
         { title: "📊 REPORTS", rows: [{ id: "path_monthly", title: "Monthly Report" }, { id: "path_unpaid", title: "Unpaid Bills" }] },
         { title: "🔍 LOOKUP", rows: [{ id: "path_lookup", title: "Get Unit Bill" }, { id: "path_summary", title: "Property Summary" }] }
       ])
@@ -125,27 +124,25 @@ export async function POST(req) {
       const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
       const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
       await updateSession(from, { step: 'awaiting_tenant_selection' })
-      return await sendListMenu(from, "🔍 Select Tenant", "Choose a tenant:", "Select", [{ title: "ACTIVE", rows: (tenants || []).map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+      return await sendListMenu(from, "🔍 Select Tenant", "Choose:", "Select", [{ title: "ACTIVE", rows: (tenants || []).map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
 
-    // 4. Session Handling
+    // 4. Session Steps
     const session = await getSession(from)
     if (session) {
       if (session.step === 'awaiting_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         const { data: bills } = await supabase.from('utility_bills').select('billing_month').eq('tenant_id', tenantId).order('billing_month', { ascending: false }).limit(5)
         await updateSession(from, { step: 'awaiting_month_selection', tenant_id: tenantId })
-        return await sendListMenu(from, `📅 Select Month`, "Choose a month:", "Select", [{ title: "MONTHS", rows: (bills || []).map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
+        return await sendListMenu(from, `📅 Select Month`, "Choose:", "Select", [{ title: "MONTHS", rows: (bills || []).map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
       }
       if (session.step === 'awaiting_month_selection') {
         const month = listId?.replace('month_', '')
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('tenant_id', session.tenant_id).eq('billing_month', month).single()
         if (bill) {
           const detail = `🧾 *Bill Breakdown (${month})*\n\n🏠 *Rent:* ₹${parseFloat(bill.fixed_rent).toLocaleString()}\n⚡ *Elec:* ₹${Math.max((bill.curr_reading - bill.prev_reading) * 10, 150).toLocaleString()}\n💧 *Water:* ₹${parseFloat(bill.water_bill).toLocaleString()}\n_________________________\n💰 *TOTAL: ₹${parseFloat(bill.total_amount).toLocaleString()}*`
-          await clearSession(from)
-          await sendButtons(from, detail, ["Main Menu", "Get Unit Bill"])
+          await clearSession(from); return await sendButtons(from, detail, ["Main Menu", "Get Unit Bill"])
         }
-        return NextResponse.json({ ok: true })
       }
     }
 
