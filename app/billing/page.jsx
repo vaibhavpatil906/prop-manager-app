@@ -95,7 +95,15 @@ function InvoiceModal({ data, onClose }) {
 function HistoryAccordion({ month, items, onEdit, onInvoice, onDelete, onPay }) {
   const [open, setOpen] = useState(true)
   const displayMonth = new Date(month + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  const totalMonth = items.reduce((sum, item) => sum + Number(item.total_amount), 0)
+  
+  const calculateDisplayTotal = (h) => {
+    const u = Math.max(0, h.curr_reading - h.prev_reading)
+    let e = u * (h.rate_per_unit || 10)
+    if (e < 150) e = 150
+    return (parseFloat(h.fixed_rent) || 0) + e + (parseFloat(h.water_bill) || 0) + (parseFloat(h.other_utilities) || 0)
+  }
+
+  const totalMonth = items.reduce((sum, item) => sum + calculateDisplayTotal(item), 0)
 
   return (
     <div style={{ background: '#fff', borderRadius: TOKENS.radiusCard, border: `1px solid ${TOKENS.border}`, overflow: 'hidden', marginBottom: 16, boxShadow: TOKENS.shadow }}>
@@ -117,7 +125,7 @@ function HistoryAccordion({ month, items, onEdit, onInvoice, onDelete, onPay }) 
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 900, fontSize: 15, color: TOKENS.dark }}>{h.tenant?.name}</div>
                 <div style={{ fontSize: 12, color: TOKENS.slate, marginTop: 4, fontWeight: 700, display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <span style={{color: TOKENS.dark, fontWeight: 900}}>₹{h.total_amount.toLocaleString()}</span>
+                  <span style={{color: TOKENS.dark, fontWeight: 900}}>₹{calculateDisplayTotal(h).toLocaleString()}</span>
                   <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 9, fontWeight: 950, background: h.payment_status === 'Paid' ? '#ecfdf5' : '#fffbeb', color: h.payment_status === 'Paid' ? '#059669' : '#d97706', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h.payment_status}</span>
                 </div>
               </div>
