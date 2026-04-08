@@ -49,7 +49,9 @@ async function getSession(phone) {
   return data
 }
 async function updateSession(phone, data) {
-  await supabase.from('bot_sessions').upsert({ phone, ...data, updated_at: new Date() })
+  // We use upsert to save the step and data
+  const { error } = await supabase.from('bot_sessions').upsert({ phone, ...data, updated_at: new Date() })
+  if (error) throw new Error(`DB_SESSION_ERROR: ${error.message}`)
 }
 async function clearSession(phone) {
   await supabase.from('bot_sessions').delete().eq('phone', phone)
@@ -60,18 +62,19 @@ const fmt = (val) => parseFloat(val || 0).toLocaleString('en-IN')
 
 // --- MAIN BOT HANDLER ---
 export async function POST(req) {
+  let from = 'unknown'
   try {
     const body = await req.json()
     const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
     if (!message) return ok()
 
-    const from = message.from
+    from = message.from
     const cleanPhone = from.replace(/\D/g, '')
 
     // 1. Auth check
     const { data: profile } = await supabase.from('profiles').select('*').ilike('contact_number', `%${cleanPhone}%`).single()
     if (!profile) {
-      await sendText(from, `⚠️ Unauthorized Number: ${from}. Please ensure this number is in your Profile settings.`)
+      await sendText(from, `⚠️ Unauthorized Number: ${from}. Please register in settings.`)
       return ok()
     }
 
@@ -79,7 +82,7 @@ export async function POST(req) {
     const listId = message.interactive?.list_reply?.id
     const input = text.toLowerCase()
 
-    // 2. Main Menu
+    // 2. Main Menu & Reset
     if (['hi', 'hello', 'menu', 'start', 'hey', 'cancel', 'reset'].includes(input) || listId === 'nav_main') {
       await clearSession(from)
       await sendListMenu(from, `👋 PropManager Home`, "Select an action:", "Menu", [
@@ -97,71 +100,88 @@ export async function POST(req) {
 
     // 3. Handle Active Session Steps
     if (session) {
-      // PAYMENT FLOW
+      // --- PAYMENT FLOW ---
       if (session.step === 'awaiting_payment_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         if (!tenantId) return ok()
-        
         const { data: tenant } = await supabase.from('tenants').select('name, unit:units(unit_number)').eq('id', tenantId).single()
         const { data: bills } = await supabase.from('utility_bills').select('id, billing_month, balance_due').eq('tenant_id', tenantId).gt('balance_due', 0).order('billing_month', { ascending: false })
         
         const tName = tenant?.name || "Resident"
-        
         if (!bills?.length) {
-          await clearSession(from); return await sendButtons(from, `✅ *${tName}* has no pending bills.`, ["Main Menu"])
+          await clearSession(from); return await sendButtons(from, `✅ *${tName}* has no pending balance.`, ["Main Menu"])
         }
         await updateSession(from, { step: 'awaiting_bill_selection', tenant_id: tenantId, tenant_name: tName, unit_num: tenant?.unit?.unit_number })
-        return await sendListMenu(from, `💰 Select Bill`, `Bills for ${tName}:`, "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${fmt(b.balance_due)})` })) }])
+        return await sendListMenu(from, `💰 Select Bill`, `Pending for ${tName}:`, "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${fmt(b.balance_due)})` })) }])
       }
 
       if (session.step === 'awaiting_bill_selection') {
         const billId = listId?.replace('bill_', '')
         if (!billId) return ok()
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', billId).single()
-        if (!bill) return await sendText(from, "❌ Bill not found.")
-        await updateSession(from, { step: 'awaiting_payment_amount', bill_id: billId, bill_month: bill.billing_month })
+        if (!bill) return await sendText(from, "❌ Bill not found. Start over with 'Hi'.")
+        await updateSession(from, { step: 'awaiting_payment_amount', bill_id: billId, bill_month: bill.billing_month, bill_total: bill.balance_due })
         return await sendText(from, `💸 Pending for *${bill.billing_month}*: ₹${fmt(bill.balance_due)}. How much received?`)
       }
 
       if (session.step === 'awaiting_payment_amount') {
+        // More robust number parsing (removes currency symbols)
         const amt = parseFloat(text.replace(/[^\d.]/g, ''))
-        if (isNaN(amt)) return await sendText(from, "❌ Enter a number.")
+        if (isNaN(amt) || amt <= 0) return await sendText(from, "❌ Enter a valid number (e.g., 5000).")
+        
         await updateSession(from, { step: 'awaiting_payment_method', payment_amt: amt })
-        return await sendButtons(from, `💰 Received: ₹${fmt(amt)}\nSelect method:`, ["Cash", "UPI", "Bank Transfer"])
+        return await sendButtons(from, `💰 Received: ₹${fmt(amt)}\n\nSelect method:`, ["Cash", "UPI", "Bank Transfer"])
       }
 
       if (session.step === 'awaiting_payment_method') {
+        const amt = parseFloat(session.payment_amt) || 0
+        const method = text
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', session.bill_id).single()
-        const amt = session.payment_amt || 0; const method = text
-        const newBal = Math.max(0, (bill?.balance_due || 0) - amt)
-        await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: amt, status: 'Paid', method, payment_date: new Date(), due_date: bill?.due_date })
+        if (!bill) return await sendText(from, "❌ Session expired. Please send 'Hi' to restart.")
+        
+        const newBal = Math.max(0, (bill.balance_due || 0) - amt)
+        
+        // Save Payment
+        const { data: pendPay } = await supabase.from('payments').select('id').eq('bill_id', session.bill_id).eq('status', 'Pending').limit(1).single()
+        if (pendPay) await supabase.from('payments').update({ amount: amt, status: 'Paid', method, payment_date: new Date(), paid_date: new Date().toISOString().split('T')[0] }).eq('id', pendPay.id)
+        else await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: amt, status: 'Paid', method, payment_date: new Date(), due_date: bill.due_date, paid_date: new Date().toISOString().split('T')[0] })
+
+        // Update Bill
         await supabase.from('utility_bills').update({ balance_due: newBal }).eq('id', session.bill_id)
-        if (newBal > 0) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBal, status: 'Pending', method: 'Partial Balance', due_date: bill?.due_date })
+        
+        // If partial, add new pending record
+        if (newBal > 0) {
+          await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBal, status: 'Pending', method: 'Partial Balance', due_date: bill.due_date })
+        }
         
         await clearSession(from)
-        const receipt = `✅ *Payment Recorded*\n👤 *Resident:* ${session.tenant_name}\n🚩 *Remaining:* ₹${fmt(newBal)}`
+        const receipt = `✅ *Payment Recorded*\n👤 *Resident:* ${session.tenant_name || 'Resident'}\n📅 *Month:* ${session.bill_month}\n_________________________\n💰 *Amount:* ₹${fmt(amt)}\n💳 *Method:* ${method}\n🚩 *Remaining:* ₹${fmt(newBal)}`
         return await sendButtons(from, receipt, ["Main Menu", "Record Payment"])
       }
 
-      // READING FLOW
+      // --- READING FLOW ---
       if (session.step === 'awaiting_unit_reading') {
-        const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', text.toUpperCase()).single()
-        if (!unit || !unit.tenants?.[0]) return await sendText(from, `❌ Unit *${text.toUpperCase()}* not found or empty.`)
-        const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', unit.tenants[0].id).order('billing_month', { ascending: false }).limit(1).single()
-        await updateSession(from, { step: 'awaiting_reading_value', tenant_id: unit.tenants[0].id, tenant_name: unit.tenants[0].name, prev_reading: last?.curr_reading || 0, rent: unit.rent, unit_num: text.toUpperCase() })
-        return await sendText(from, `👤 Resident: ${unit.tenants[0].name}. What is current reading?`)
+        const unitNum = text.toUpperCase()
+        const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', unitNum).single()
+        if (!unit || !unit.tenants?.[0]) return await sendText(from, `❌ Unit *${unitNum}* not found or empty.`)
+        const tenant = unit.tenants[0]
+        const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', tenant.id).order('billing_month', { ascending: false }).limit(1).single()
+        await updateSession(from, { step: 'awaiting_reading_value', tenant_id: tenant.id, tenant_name: tenant.name, prev_reading: last?.curr_reading || 0, rent: unit.rent, unit_num: unitNum })
+        return await sendText(from, `👤 *Resident:* ${tenant.name}\n📟 *Previous:* ${last?.curr_reading || 0}\n\nWhat is the current reading?`)
       }
 
       if (session.step === 'awaiting_reading_value') {
         const curr = parseFloat(text.replace(/[^\d.]/g, ''))
-        if (isNaN(curr)) return await sendText(from, "❌ Enter a number.")
+        if (isNaN(curr)) return await sendText(from, "❌ Enter a valid number.")
         await updateSession(from, { step: 'awaiting_water_value', curr_reading: curr })
-        return await sendButtons(from, `📟 Current: ${curr}\nWhat is the Water Bill?`, ["Skip (140)", "Enter Custom"])
+        return await sendButtons(from, `📟 *Current:* ${curr}\n\nWhat is the Water Bill?`, ["Skip (140)", "Enter Custom"])
       }
 
       if (session.step === 'awaiting_water_value') {
-        const water = input === 'enter custom' ? 0 : (input.startsWith('skip') ? 140 : parseFloat(text.replace(/[^\d.]/g, '')))
         if (input === 'enter custom') return await sendText(from, "Type water amount:")
+        const water = input.startsWith('skip') ? 140 : parseFloat(text.replace(/[^\d.]/g, ''))
+        if (isNaN(water)) return await sendText(from, "❌ Enter a valid amount.")
+        
         const elec = Math.max((session.curr_reading - session.prev_reading) * 10, 150)
         const total = parseFloat(session.rent) + elec + water
         const month = new Date().toISOString().slice(0, 7)
@@ -209,7 +229,9 @@ export async function POST(req) {
     return await sendText(from, "❓ Send *Hi* for menu.")
 
   } catch (err) {
-    console.error('Bot Error:', err)
+    console.error('SERVER_ERROR:', err.message)
+    // Send the error back to the user so we know exactly what failed!
+    await sendText(from, `⚠️ Technical Error: ${err.message}. Please restart with 'Hi'.`)
     return ok()
   }
 }
