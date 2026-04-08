@@ -70,21 +70,24 @@ export async function POST(req) {
   let from = 'unknown'
   try {
     const body = await req.json()
-    console.log('[BOT] Body:', JSON.stringify(body))
+    console.log('[BOT] Body Received:', JSON.stringify(body))
+
+    const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
+    if (!message) {
+      console.log('[BOT] No message object in request')
+      return ok()
+    }
 
     from = message.from
     const cleanPhone = from.replace(/\D/g, '')
+    console.log(`[BOT] Incoming from: ${from} | Cleaned: ${cleanPhone}`)
 
-    // 1. Auth check (Flexible)
-    const { data: profile, error: pErr } = await supabase.from('profiles').select('*').limit(1).single()
-    // NOTE: Temporarily allowing the first profile found if phone lookup fails for debugging
-    // You should revert this to .eq('contact_number', cleanPhone) after verification
-    const { data: authProfile } = await supabase.from('profiles').select('*').ilike('contact_number', `%${cleanPhone}%`).single()
+    // 1. Auth check
+    const { data: profile } = await supabase.from('profiles').select('*').ilike('contact_number', `%${cleanPhone}%`).single()
     
-    const activeProfile = authProfile || profile // Use actual match or fallback to primary for owner
-    
-    if (!activeProfile) {
-      await sendText(from, `⚠️ Access Denied: ${from}. Please add this number to your settings.`)
+    if (!profile) {
+      console.log(`[BOT] Auth Failed for ${cleanPhone}`)
+      await sendText(from, `⚠️ Unauthorized Number: ${from}. Please register in settings.`)
       return ok()
     }
 
@@ -172,7 +175,7 @@ export async function POST(req) {
         const elec = Math.max((session.curr_reading - session.prev_reading) * 10, 150)
         const total = parseFloat(session.rent) + elec + water
         const month = new Date().toISOString().slice(0, 7)
-        const { data: bill } = await supabase.from('utility_bills').upsert({ user_id: activeProfile.id, tenant_id: session.tenant_id, billing_month: month, prev_reading: session.prev_reading, curr_reading: session.curr_reading, rate_per_unit: 10, fixed_rent: session.rent, water_bill: water, total_amount: total, balance_due: total, due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] }).select().single()
+        const { data: bill } = await supabase.from('utility_bills').upsert({ user_id: profile.id, tenant_id: session.tenant_id, billing_month: month, prev_reading: session.prev_reading, curr_reading: session.curr_reading, rate_per_unit: 10, fixed_rent: session.rent, water_bill: water, total_amount: total, balance_due: total, due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] }).select().single()
         if (bill) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: bill.id, amount: total, status: 'Pending', method: 'Utility Bill', due_date: bill.due_date })
         await clearSession(from); return await sendButtons(from, `✅ *Bill Saved*\n💰 Total: ₹${fmt(total)}`, ["Main Menu", "Submit Reading"])
       }
@@ -185,21 +188,21 @@ export async function POST(req) {
     }
 
     if (listId === 'path_pay_rec' || input === 'record payment') {
-      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', activeProfile.id).eq('status', 'Active')
+      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
       if (!tenants?.length) return await sendText(from, "🏠 No active residents.")
       await updateSession(from, { step: 'awaiting_payment_tenant_selection' })
       return await sendListMenu(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
     
     if (listId === 'path_lookup' || input === 'get unit bill') {
-      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', activeProfile.id).eq('status', 'Active')
+      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
       if (!tenants?.length) return await sendText(from, "🏠 No active residents.")
       await updateSession(from, { step: 'awaiting_tenant_selection' })
       return await sendListMenu(from, "🔍 Select Tenant", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
 
     if (listId === 'path_unpaid' || input === 'unpaid bills') {
-      const { data: bills } = await supabase.from('utility_bills').select(`total_amount, balance_due, billing_month, tenant_id`).eq('user_id', activeProfile.id).gt('balance_due', 0).order('billing_month', { ascending: false })
+      const { data: bills } = await supabase.from('utility_bills').select(`total_amount, balance_due, billing_month, tenant_id`).eq('user_id', profile.id).gt('balance_due', 0).order('billing_month', { ascending: false })
       if (!bills?.length) return await sendButtons(from, "✅ All paid!", ["Main Menu"])
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
       const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || 'Unit']))
@@ -209,7 +212,7 @@ export async function POST(req) {
     }
 
     if (listId === 'path_summary' || input === 'property summary') {
-      const { data: props } = await supabase.from('properties').select('name, units').eq('user_id', activeProfile.id)
+      const { data: props } = await supabase.from('properties').select('name, units').eq('user_id', profile.id)
       return await sendButtons(from, props?.length ? `🏢 *Properties:*\n` + props.map(p => `• ${p.name}: ${p.units}u`).join('\n') : "🏠 No properties.", ["Main Menu"])
     }
 
