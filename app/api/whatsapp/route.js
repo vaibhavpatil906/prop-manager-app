@@ -55,36 +55,39 @@ async function clearSession(phone) {
 
 // --- AI ENGINE ---
 async function handleAISearch(from, profileId, userQuery) {
-  if (!process.env.GEMINI_API_KEY) return await sendText(from, "⚠️ AI Key Missing.")
+  if (!process.env.GEMINI_API_KEY) return await sendText(from, "⚠️ AI Key Missing in Vercel.")
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" })
+    // Use gemini-1.5-flash as it is the most stable and generally available
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
 
-    // 1. Fetch high-level data
-    const [ { data: tenants }, { data: units } ] = await Promise.all([
-      supabase.from('tenants').select('id, name, unit_id').eq('user_id', profileId),
-      supabase.from('units').select('id, unit_number, rent')
-    ])
-
-    const prompt = `You are a PropManager AI. 
-    Tenants: ${JSON.stringify(tenants?.map(t => ({ name: t.name, unit: units?.find(u => u.id === t.unit_id)?.unit_number })))}
-    Units: ${JSON.stringify(units?.map(u => ({ number: u.unit_number, rent: u.rent })))}
+    // 1. Fetch basic context
+    const { data: tenants } = await supabase.from('tenants').select('name, unit_id').eq('user_id', profileId)
+    const { data: units } = await supabase.from('units').select('id, unit_number, rent')
     
-    Instruction: Answer concisely. If asked about "billing" or "bills" for a specific unit, tell the user to use the "Get Unit Bill" menu for live data, or answer if the context above has the rent.
-    User Question: ${userQuery}`
+    const context = (tenants || []).map(t => {
+      const u = (units || []).find(un => un.id === t.unit_id)
+      return `${t.name} occupies unit ${u?.unit_number || 'Unknown'}. Monthly rent is ₹${u?.rent || 'Unknown'}`
+    }).join('. ')
+
+    const prompt = `You are a Property Manager AI. 
+    Context: ${context || 'No active tenants found.'}
+    
+    Question: ${userQuery}
+    
+    Instruction: Answer concisely in 1-2 sentences. If you don't know, say "I couldn't find that in your records."`
 
     const result = await model.generateContent(prompt)
-    const text = result.response.text()
+    const aiResponse = result.response.text()
     
-    await sendText(from, `🤖 *AI Assistant*\n\n${text}`)
+    await sendText(from, `🤖 *AI Assistant*\n\n${aiResponse}`)
   } catch (err) {
     console.error('AI ERROR:', err)
-    // Fallback: If AI fails, don't show "Busy", just show a helpful hint
-    await sendText(from, "🤖 I'm having trouble with that query. Try checking the 'Reports' or 'Lookup' menus below!")
+    await sendText(from, `🤖 Sorry, I'm having trouble connecting to my AI brain. (Error: ${err.message})`)
   }
 }
 
-// --- MAIN BOT ---
+// --- MAIN BOT HANDLER ---
 export async function POST(req) {
   try {
     const body = await req.json()
@@ -94,66 +97,69 @@ export async function POST(req) {
     const from = message.from
     const cleanPhone = from.replace(/\D/g, '')
 
-    // 1. Auth
+    // 1. Auth check
     const { data: profile } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
     if (!profile) {
       await sendText(from, `⚠️ Unauthorized: ${cleanPhone}`)
       return NextResponse.json({ ok: true })
     }
 
-    // 2. Menu Reset
     const text = (message.text?.body || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "").trim()
     const listId = message.interactive?.list_reply?.id
     const input = text.toLowerCase()
 
+    // 2. Menu Reset
     if (['hi', 'hello', 'menu', 'start', 'hey'].includes(input) || listId === 'nav_main') {
       await clearSession(from)
-      await sendListMenu(from, `👋 PropManager Home`, "Select an option:", "Actions", [
-        { title: "⚡ RECORD", rows: [{ id: "path_reading", title: "Submit Reading" }] },
+      await sendListMenu(from, `👋 PropManager Home`, "What would you like to do?", "Open Menu", [
+        { title: "⚡ ACTIONS", rows: [{ id: "path_reading", title: "Submit Reading" }] },
         { title: "📊 REPORTS", rows: [{ id: "path_monthly", title: "Monthly Report" }, { id: "path_unpaid", title: "Unpaid Bills" }] },
         { title: "🔍 LOOKUP", rows: [{ id: "path_lookup", title: "Get Unit Bill" }, { id: "path_summary", title: "Property Summary" }] }
       ])
       return NextResponse.json({ ok: true })
     }
 
-    // 3. Triggers
+    // 3. Action Triggers
     if (listId === 'path_lookup' || input === 'get unit bill') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').eq('user_id', profile.id).eq('status', 'Active')
       const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
       const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
       await updateSession(from, { step: 'awaiting_tenant_selection' })
-      return await sendListMenu(from, "🔍 Select Tenant", "Choose:", "Select", [{ title: "ACTIVE", rows: (tenants || []).map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+      await sendListMenu(from, "🔍 Select Tenant", "Choose a tenant to see their bill history:", "Select", [{ title: "ACTIVE", rows: (tenants || []).map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+      return NextResponse.json({ ok: true })
     }
 
-    // (Add other triggers here as needed)
-
-    // 4. Session Handling (Simple)
+    // 4. Session Steps
     const session = await getSession(from)
     if (session) {
       if (session.step === 'awaiting_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         const { data: bills } = await supabase.from('utility_bills').select('billing_month').eq('tenant_id', tenantId).order('billing_month', { ascending: false }).limit(5)
         await updateSession(from, { step: 'awaiting_month_selection', tenant_id: tenantId })
-        return await sendListMenu(from, `📅 Select Month`, "Choose:", "Select", [{ title: "MONTHS", rows: (bills || []).map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
+        await sendListMenu(from, `📅 Select Month`, "Choose a month:", "Select", [{ title: "MONTHS", rows: (bills || []).map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
+        return NextResponse.json({ ok: true })
       }
+      
       if (session.step === 'awaiting_month_selection') {
         const month = listId?.replace('month_', '')
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('tenant_id', session.tenant_id).eq('billing_month', month).single()
         if (bill) {
-          const detail = `🧾 *Bill: ${month}*\n🏠 *Rent:* ₹${parseFloat(bill.fixed_rent).toLocaleString()}\n⚡ *Elec:* ₹${Math.max((bill.curr_reading - bill.prev_reading) * 10, 150).toLocaleString()}\n💧 *Water:* ₹${parseFloat(bill.water_bill).toLocaleString()}\n💰 *TOTAL: ₹${parseFloat(bill.total_amount).toLocaleString()}*`
-          await clearSession(from); return await sendButtons(from, detail, ["Main Menu", "Get Unit Bill"])
+          const detail = `🧾 *Bill Breakdown (${month})*\n\n🏠 *Rent:* ₹${parseFloat(bill.fixed_rent).toLocaleString()}\n⚡ *Elec:* ₹${Math.max((bill.curr_reading - bill.prev_reading) * 10, 150).toLocaleString()}\n💧 *Water:* ₹${parseFloat(bill.water_bill).toLocaleString()}\n_________________________\n💰 *TOTAL: ₹${parseFloat(bill.total_amount).toLocaleString()}*`
+          await clearSession(from)
+          await sendButtons(from, detail, ["Main Menu", "Get Unit Bill"])
         }
+        return NextResponse.json({ ok: true })
       }
     }
 
-    // 5. Final AI Fallback
+    // 5. AI Search Fallback (if no other triggers matched)
     if (text.length > 2) {
       await handleAISearch(from, profile.id, text)
     }
     
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error('CRITICAL ERROR:', err)
+    console.error('SERVER ERROR:', err)
     return NextResponse.json({ ok: true })
   }
 }
