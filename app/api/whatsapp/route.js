@@ -11,11 +11,15 @@ async function callWhatsApp(to, messageData) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_ID
   if (!token || !phoneId) return
-  return await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
-  })
+  try {
+    return await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
+    })
+  } catch (err) {
+    console.error('WhatsApp API Error:', err)
+  }
 }
 
 const sendText = async (to, text) => await callWhatsApp(to, { type: "text", text: { body: text } })
@@ -44,8 +48,7 @@ async function getSession(phone) {
   return data
 }
 async function updateSession(phone, data) {
-  const { error } = await supabase.from('bot_sessions').upsert({ phone, ...data, updated_at: new Date() })
-  if (error) console.error('Session Update Error:', error)
+  await supabase.from('bot_sessions').upsert({ phone, ...data, updated_at: new Date() })
 }
 async function clearSession(phone) {
   await supabase.from('bot_sessions').delete().eq('phone', phone)
@@ -64,7 +67,7 @@ export async function POST(req) {
     // 1. Auth check
     const { data: profile } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
     if (!profile) {
-      await sendText(from, `⚠️ Unauthorized Number: ${cleanPhone}`)
+      await sendText(from, `⚠️ Unauthorized: ${cleanPhone}`)
       return NextResponse.json({ ok: true })
     }
 
@@ -94,7 +97,10 @@ export async function POST(req) {
       if (session.step === 'awaiting_payment_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         if (!tenantId) return NextResponse.json({ ok: true })
+        
         const { data: tenant } = await supabase.from('tenants').select('name, unit:units(unit_number)').eq('id', tenantId).single()
+        if (!tenant) return await sendText(from, "❌ Resident data missing. Please try again.")
+
         const { data: bills } = await supabase.from('utility_bills').select('id, billing_month, balance_due').eq('tenant_id', tenantId).gt('balance_due', 0).order('billing_month', { ascending: false })
         
         if (!bills?.length) {
@@ -111,24 +117,18 @@ export async function POST(req) {
         const billId = listId?.replace('bill_', '')
         if (!billId) return NextResponse.json({ ok: true })
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', billId).single()
+        if (!bill) return await sendText(from, "❌ Bill not found. Please try again.")
+        
         await updateSession(from, { step: 'awaiting_payment_amount', bill_id: billId, bill_month: bill.billing_month, bill_total: bill.balance_due })
         await sendText(from, `💸 *Pending for ${bill.billing_month}:* ₹${parseFloat(bill.balance_due).toLocaleString()}\n\nHow much was received?`)
         return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'awaiting_payment_amount') {
-        console.log('BOT: Processing payment amount:', text)
         const amt = parseFloat(text)
-        if (isNaN(amt)) {
-          console.log('BOT: Invalid amount entered')
-          await sendText(from, "❌ Please enter a valid number (e.g., 5000).")
-          return NextResponse.json({ ok: true })
-        }
-        console.log('BOT: Updating session to awaiting_payment_method')
+        if (isNaN(amt)) return await sendText(from, "❌ Please enter a valid number (e.g., 5000).")
         await updateSession(from, { step: 'awaiting_payment_method', payment_amt: amt })
-        console.log('BOT: Sending method selection buttons')
-        const sent = await sendButtons(from, `💰 Received: ₹${amt.toLocaleString()}\n\nSelect payment method:`, ["Cash", "UPI", "Bank Transfer"])
-        console.log('BOT: Button send result:', sent?.status)
+        await sendButtons(from, `💰 Received: ₹${amt.toLocaleString()}\n\nSelect payment method:`, ["Cash", "UPI", "Bank Transfer"])
         return NextResponse.json({ ok: true })
       }
 
@@ -136,6 +136,8 @@ export async function POST(req) {
         const amt = session.payment_amt
         const method = text
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', session.bill_id).single()
+        if (!bill) return await sendText(from, "❌ Bill context lost. Please try again.")
+        
         const newBalance = bill.balance_due - amt
         
         const { data: pendPay } = await supabase.from('payments').select('id').eq('bill_id', session.bill_id).eq('status', 'Pending').limit(1).single()
@@ -147,8 +149,8 @@ export async function POST(req) {
         
         await clearSession(from)
         const receipt = `✅ *Payment Recorded*\n` +
-                        `👤 *Tenant:* ${session.tenant_name}\n` +
-                        `🏠 *Unit:* ${session.unit_num}\n` +
+                        `👤 *Tenant:* ${session.tenant_name || 'Resident'}\n` +
+                        `🏠 *Unit:* ${session.unit_num || 'Unit'}\n` +
                         `📅 *Month:* ${session.bill_month}\n` +
                         `_________________________\n` +
                         `💰 *Amount:* ₹${amt.toLocaleString()}\n` +
@@ -163,23 +165,20 @@ export async function POST(req) {
       if (session.step === 'awaiting_unit_reading') {
         const unitNum = text.toUpperCase()
         const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', unitNum).single()
-        if (!unit?.tenants?.[0]) {
-          await sendText(from, `❌ Unit *${unitNum}* not found or has no tenant.`)
+        if (!unit || !unit.tenants || unit.tenants.length === 0) {
+          await sendText(from, `❌ Unit *${unitNum}* not found or has no active resident.`)
           return NextResponse.json({ ok: true })
         }
         const tenant = unit.tenants[0]
         const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', tenant.id).order('billing_month', { ascending: false }).limit(1).single()
         await updateSession(from, { step: 'awaiting_reading_value', unit_id: unit.id, unit_num: unitNum, tenant_name: tenant.name, tenant_id: tenant.id, prev_reading: last?.curr_reading || 0, rent: unit.rent })
-        await sendText(from, `👤 *Tenant:* ${tenant.name}\n📟 *Previous:* ${last?.curr_reading || 0}\n\nWhat is the *Current Reading*?`)
+        await sendText(from, `👤 *Resident:* ${tenant.name}\n📟 *Previous:* ${last?.curr_reading || 0}\n\nWhat is the *Current Reading*?`)
         return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'awaiting_reading_value') {
         const curr = parseFloat(text)
-        if (isNaN(curr)) {
-          await sendText(from, "❌ Please enter a valid number.")
-          return NextResponse.json({ ok: true })
-        }
+        if (isNaN(curr)) return await sendText(from, "❌ Please enter a valid number.")
         await updateSession(from, { step: 'awaiting_water_value', curr_reading: curr })
         await sendButtons(from, `📟 *Current:* ${curr}\n\nWhat is the Water Bill?`, ["Skip (140)", "Enter Custom"])
         return NextResponse.json({ ok: true })
@@ -208,7 +207,7 @@ export async function POST(req) {
         const { data: bills } = await supabase.from('utility_bills').select('billing_month').eq('tenant_id', tenantId).order('billing_month', { ascending: false }).limit(5)
         if (!bills?.length) {
           await clearSession(from)
-          await sendButtons(from, `📭 No history found.`, ["Main Menu", "Get Unit Bill"])
+          await sendButtons(from, `📭 No history found for this resident.`, ["Main Menu", "Get Unit Bill"])
           return NextResponse.json({ ok: true })
         }
         await updateSession(from, { step: 'awaiting_month_selection', tenant_id: tenantId })
@@ -246,8 +245,8 @@ export async function POST(req) {
 
     if (listId === 'path_pay_rec' || input === 'record payment') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) {
-        await sendText(from, "🏠 No active tenants.")
+      if (!tenants || tenants.length === 0) {
+        await sendText(from, "🏠 No active residents found.")
         return NextResponse.json({ ok: true })
       }
       await updateSession(from, { step: 'awaiting_payment_tenant_selection' })
@@ -256,8 +255,8 @@ export async function POST(req) {
     
     if (listId === 'path_lookup' || input === 'get unit bill') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) {
-        await sendText(from, "🏠 No active tenants.")
+      if (!tenants || tenants.length === 0) {
+        await sendText(from, "🏠 No active residents found.")
         return NextResponse.json({ ok: true })
       }
       await updateSession(from, { step: 'awaiting_tenant_selection' })
@@ -279,8 +278,8 @@ export async function POST(req) {
 
     if (listId === 'path_unpaid' || input === 'unpaid bills') {
       const { data: bills } = await supabase.from('utility_bills').select(`total_amount, balance_due, billing_month, tenant_id`).eq('user_id', profile.id).gt('balance_due', 0).order('billing_month', { ascending: false })
-      if (!bills?.length) {
-        await sendButtons(from, "✅ All paid!", ["Main Menu"])
+      if (!bills || bills.length === 0) {
+        await sendButtons(from, "✅ All bills are fully paid!", ["Main Menu"])
         return NextResponse.json({ ok: true })
       }
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
@@ -295,14 +294,14 @@ export async function POST(req) {
     return NextResponse.json({ ok: true })
 
   } catch (err) {
-    console.error('Bot Error:', err)
+    console.error('Bot Critical Error:', err)
     return NextResponse.json({ ok: true })
   }
 }
 
 async function generateMonthlyReport(from, profileId, targetMonth) {
   const { data: bills } = await supabase.from('utility_bills').select('*').eq('user_id', profileId).eq('billing_month', targetMonth)
-  if (!bills?.length) return await sendButtons(from, `📭 No data for ${targetMonth}`, ["Main Menu", "Monthly Report"])
+  if (!bills || bills.length === 0) return await sendButtons(from, `📭 No data for ${targetMonth}`, ["Main Menu", "Monthly Report"])
   const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
   const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || 'Unit']))
   
