@@ -240,9 +240,13 @@ export default function Tenants() {
               <tbody>
                 {tenantDetailModal.bills.length === 0 ? <tr><td colSpan="6" style={{padding:40, textAlign:'center', color: TOKENS.slate, fontWeight:700}}>No past financial activity.</td></tr> :
                  tenantDetailModal.bills.map(b => {
-                  const energyUnits = b.curr_reading - b.prev_reading
+                  const energyUnits = Math.max(0, b.curr_reading - b.prev_reading)
                   let energyBill = energyUnits * b.rate_per_unit
-                  if (energyBill > 0 && energyBill < 150) energyBill = 150
+                  if (energyBill < 150) energyBill = 150
+                  
+                  const payment = tenantDetailModal.payments.find(p => p.bill_id === b.id)
+                  const status = payment?.status || (b.balance_due === 0 ? 'Paid' : 'Pending')
+                  
                   return (
                     <tr key={b.id} style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
                       <td style={{ padding: '16px 20px', fontWeight: 950, color: TOKENS.dark }}>{b.billing_month}</td>
@@ -251,7 +255,7 @@ export default function Tenants() {
                       <td style={{ padding: '16px 20px', fontWeight: 800, color: TOKENS.dark }}>₹{parseFloat(b.fixed_rent || 0).toLocaleString()}</td>
                       <td style={{ padding: '16px 20px', fontWeight: 950, color: TOKENS.primary, fontSize: 15 }}>₹{b.total_amount.toLocaleString()}</td>
                       <td style={{ padding: '16px 20px' }}>
-                        <Badge label={tenantDetailModal.payments.find(p => p.due_date === b.due_date && Math.abs(Number(p.amount) - Number(b.total_amount)) < 1)?.status || 'Pending'} />
+                        <Badge label={status} />
                       </td>
                     </tr>
                   )
