@@ -53,37 +53,45 @@ async function clearSession(phone) {
   await supabase.from('bot_sessions').delete().eq('phone', phone)
 }
 
-// --- AI ENGINE ---
+// --- AI ENGINE WITH AUTO-FALLBACK ---
 async function handleAISearch(from, profileId, userQuery) {
-  if (!process.env.GEMINI_API_KEY) return await sendText(from, "⚠️ AI Key Missing in Vercel.")
+  if (!process.env.GEMINI_API_KEY) return await sendText(from, "⚠️ AI Key Missing.")
 
   try {
-    // Use gemini-1.5-flash as it is the most stable and generally available
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
-
-    // 1. Fetch basic context
+    // 1. Fetch Context
     const { data: tenants } = await supabase.from('tenants').select('name, unit_id').eq('user_id', profileId)
     const { data: units } = await supabase.from('units').select('id, unit_number, rent')
-    
     const context = (tenants || []).map(t => {
       const u = (units || []).find(un => un.id === t.unit_id)
-      return `${t.name} occupies unit ${u?.unit_number || 'Unknown'}. Monthly rent is ₹${u?.rent || 'Unknown'}`
+      return `${t.name} is in unit ${u?.unit_number || '?'}. Rent: ₹${u?.rent || '?'}`
     }).join('. ')
 
-    const prompt = `You are a Property Manager AI. 
-    Context: ${context || 'No active tenants found.'}
-    
-    Question: ${userQuery}
-    
-    Instruction: Answer concisely in 1-2 sentences. If you don't know, say "I couldn't find that in your records."`
+    const prompt = `Assistant for PropManager. Context: ${context || 'Empty'}. Question: ${userQuery}. Instruction: 1 sentence answer.`
 
-    const result = await model.generateContent(prompt)
-    const aiResponse = result.response.text()
-    
-    await sendText(from, `🤖 *AI Assistant*\n\n${aiResponse}`)
+    // 2. Try multiple model names to solve 404 errors
+    const models = ["gemini-pro", "gemini-1.5-flash", "gemini-1.0-pro"]
+    let aiResponse = ""
+    let success = false
+
+    for (const modelName of models) {
+      if (success) break
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName })
+        const result = await model.generateContent(prompt)
+        aiResponse = result.response.text()
+        success = true
+      } catch (err) {
+        console.error(`AI Fail (${modelName}):`, err.message)
+      }
+    }
+
+    if (success) {
+      await sendText(from, `🤖 *AI Assistant*\n\n${aiResponse}`)
+    } else {
+      await sendText(from, "🤖 Sorry, I couldn't reach my AI brain. Please use the Menu buttons below.")
+    }
   } catch (err) {
-    console.error('AI ERROR:', err)
-    await sendText(from, `🤖 Sorry, I'm having trouble connecting to my AI brain. (Error: ${err.message})`)
+    console.error('Final AI Error:', err)
   }
 }
 
@@ -100,7 +108,7 @@ export async function POST(req) {
     // 1. Auth check
     const { data: profile } = await supabase.from('profiles').select('*').eq('contact_number', cleanPhone).single()
     if (!profile) {
-      await sendText(from, `⚠️ Unauthorized: ${cleanPhone}`)
+      await sendText(from, `⚠️ Unauthorized Number: ${cleanPhone}`)
       return NextResponse.json({ ok: true })
     }
 
@@ -108,10 +116,10 @@ export async function POST(req) {
     const listId = message.interactive?.list_reply?.id
     const input = text.toLowerCase()
 
-    // 2. Menu Reset
+    // 2. Main Menu
     if (['hi', 'hello', 'menu', 'start', 'hey'].includes(input) || listId === 'nav_main') {
       await clearSession(from)
-      await sendListMenu(from, `👋 PropManager Home`, "What would you like to do?", "Open Menu", [
+      await sendListMenu(from, `👋 PropManager Home`, "Select an action:", "Open Menu", [
         { title: "⚡ ACTIONS", rows: [{ id: "path_reading", title: "Submit Reading" }] },
         { title: "📊 REPORTS", rows: [{ id: "path_monthly", title: "Monthly Report" }, { id: "path_unpaid", title: "Unpaid Bills" }] },
         { title: "🔍 LOOKUP", rows: [{ id: "path_lookup", title: "Get Unit Bill" }, { id: "path_summary", title: "Property Summary" }] }
@@ -119,27 +127,24 @@ export async function POST(req) {
       return NextResponse.json({ ok: true })
     }
 
-    // 3. Action Triggers
+    // 3. Lookup Trigger
     if (listId === 'path_lookup' || input === 'get unit bill') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').eq('user_id', profile.id).eq('status', 'Active')
       const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
       const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
       await updateSession(from, { step: 'awaiting_tenant_selection' })
-      await sendListMenu(from, "🔍 Select Tenant", "Choose a tenant to see their bill history:", "Select", [{ title: "ACTIVE", rows: (tenants || []).map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
-      return NextResponse.json({ ok: true })
+      return await sendListMenu(from, "🔍 Select Tenant", "Choose a tenant:", "Select", [{ title: "ACTIVE", rows: (tenants || []).map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
 
-    // 4. Session Steps
+    // 4. Session Handling
     const session = await getSession(from)
     if (session) {
       if (session.step === 'awaiting_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         const { data: bills } = await supabase.from('utility_bills').select('billing_month').eq('tenant_id', tenantId).order('billing_month', { ascending: false }).limit(5)
         await updateSession(from, { step: 'awaiting_month_selection', tenant_id: tenantId })
-        await sendListMenu(from, `📅 Select Month`, "Choose a month:", "Select", [{ title: "MONTHS", rows: (bills || []).map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
-        return NextResponse.json({ ok: true })
+        return await sendListMenu(from, `📅 Select Month`, "Choose a month:", "Select", [{ title: "MONTHS", rows: (bills || []).map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
       }
-      
       if (session.step === 'awaiting_month_selection') {
         const month = listId?.replace('month_', '')
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('tenant_id', session.tenant_id).eq('billing_month', month).single()
@@ -152,7 +157,14 @@ export async function POST(req) {
       }
     }
 
-    // 5. AI Search Fallback (if no other triggers matched)
+    // 5. Action Fallbacks
+    if (listId === 'path_unpaid' || input === 'unpaid bills') {
+      const { data: bills } = await supabase.from('utility_bills').select(`total_amount, billing_month, tenant_id`).eq('user_id', profile.id).order('billing_month', { ascending: false }).limit(10)
+      let r = `🚩 Outstanding Bills:\n\n`; bills?.forEach(b => { r += `▫️ ${b.billing_month}: ₹${b.total_amount}\n` })
+      return await sendButtons(from, r || "✅ All Paid.", ["Main Menu"])
+    }
+
+    // 6. AI Natural Language Search
     if (text.length > 2) {
       await handleAISearch(from, profile.id, text)
     }
