@@ -79,11 +79,23 @@ async function getSession(phone) {
   return data
 }
 
-async function updateSession(phone, data) {
-  const { error } = await supabase
+async function updateSession(phone, newData) {
+  // Fetch existing session first so we never wipe keys from previous steps
+  const { data: existing } = await supabase
     .from('bot_sessions')
-    .upsert({ phone, ...data, updated_at: new Date().toISOString() })
-  if (error) console.error('updateSession error:', error.message, JSON.stringify(data))
+    .select('*')
+    .eq('phone', phone)
+    .single()
+
+  const merged = {
+    ...(existing || {}),
+    ...newData,
+    phone,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error } = await supabase.from('bot_sessions').upsert(merged)
+  if (error) console.error('updateSession error:', error.message, JSON.stringify(newData))
 }
 
 async function clearSession(phone) {
@@ -201,6 +213,11 @@ async function handlePaymentAmount({ from, text, session }) {
 
 async function handlePaymentMethod({ from, text, session }) {
   const amt = parseFloat(session.payment_amt) || 0
+  if (amt <= 0) {
+    await clearSession(from)
+    await sendText(from, '❌ Invalid amount in session. Please start over by sending *Hi*.')
+    return ok()
+  }
   const method = text
 
   const { data: bill } = await supabase
