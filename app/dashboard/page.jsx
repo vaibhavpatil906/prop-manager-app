@@ -66,18 +66,20 @@ export default function Dashboard() {
         { data: tenants },
         { data: payments },
         { data: maintenance },
+        { data: bills },
       ] = await Promise.all([
         supabase.from('properties').select('id').eq('user_id', user.id),
         supabase.from('units').select('id, status, property:properties!inner(user_id)').eq('property.user_id', user.id),
         supabase.from('tenants').select('id').eq('user_id', user.id),
         supabase.from('payments').select('*, tenant:tenants(name)').order('created_at', { ascending: false }),
         supabase.from('maintenance_requests').select('*, tenant:tenants(name), unit:units(unit_number)').order('created_at', { ascending: false }),
+        supabase.from('utility_bills').select('balance_due').eq('user_id', user.id),
       ])
 
       const totalUnits = units?.length || 0
       const occupiedUnits = units?.filter(u => u.status === 'Occupied').length || 0
       const revenue = payments?.filter(p => p.status === 'Paid').reduce((a, b) => a + Number(b.amount), 0) || 0
-      const outstanding = payments?.filter(p => p.status !== 'Paid').reduce((a, b) => a + Number(b.amount), 0) || 0
+      const outstanding = bills?.reduce((a, b) => a + Number(b.balance_due || 0), 0) || 0
       const openMaintenance = maintenance?.filter(m => m.status === 'Open').length || 0
 
       setStats({
