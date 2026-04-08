@@ -174,8 +174,8 @@ export default function Billing() {
     const { data: payments } = await supabase.from('payments').select('*').eq('method', 'Utility Bill')
     
     const enrichedHistory = (bills || []).map(bill => {
-      const match = payments?.find(p => p.tenant_id === bill.tenant_id && p.due_date === bill.due_date && Math.abs(Number(p.amount) - Number(bill.total_amount)) < 1)
-      return { ...bill, payment_status: match?.status || 'Pending', payment_id: match?.id }
+      const match = payments?.find(p => p.bill_id === bill.id)
+      return { ...bill, payment_status: match?.status || (bill.balance_due === 0 ? 'Paid' : 'Pending'), payment_id: match?.id }
     })
     setHistory(enrichedHistory)
     setLoading(false)
