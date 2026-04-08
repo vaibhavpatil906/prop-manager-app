@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { GoogleGenerativeAI } from "@google/generative-ai"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
   process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder'
 )
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY?.trim() || "")
 
 // --- WHATSAPP HELPERS ---
 async function callWhatsApp(to, messageData) {
@@ -53,39 +50,6 @@ async function clearSession(phone) {
   await supabase.from('bot_sessions').delete().eq('phone', phone)
 }
 
-// --- AI ENGINE (STABLE VERSION) ---
-async function handleAISearch(from, profileId, userQuery) {
-  const apiKey = process.env.GEMINI_API_KEY?.trim()
-  if (!apiKey) return await sendText(from, "⚠️ AI Key Missing in Vercel.")
-
-  // Using the most widely supported model IDs to resolve 404 errors
-  const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
-
-  // 1. Fetch Basic Context
-  const { data: tenants } = await supabase.from('tenants').select('name, unit_id').eq('user_id', profileId)
-  const { data: units } = await supabase.from('units').select('id, unit_number, rent')
-  const context = (tenants || []).map(t => {
-    const u = (units || []).find(un => un.id === t.unit_id)
-    return `${t.name} is in unit ${u?.unit_number || 'Unknown'}`
-  }).join('. ')
-
-  const prompt = `System: Property Assistant. Records: ${context || 'None'}. Answer concisely: ${userQuery}`
-
-  for (const modelName of modelsToTry) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName })
-      const result = await model.generateContent(prompt)
-      const aiResponse = result.response.text()
-      return await sendText(from, `🤖 *AI Assistant*\n\n${aiResponse}`)
-    } catch (err) {
-      console.error(`AI Error with ${modelName}:`, err.message)
-      if (modelName === modelsToTry[modelsToTry.length - 1]) {
-        await sendText(from, "🤖 *AI Error*: Could not find a supported model. Please ensure the 'Generative Language API' is enabled for your key.")
-      }
-    }
-  }
-}
-
 // --- MAIN BOT HANDLER ---
 export async function POST(req) {
   try {
@@ -121,20 +85,22 @@ export async function POST(req) {
     // 3. Lookup Trigger
     if (listId === 'path_lookup' || input === 'get unit bill') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').eq('user_id', profile.id).eq('status', 'Active')
-      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
+      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
+      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', tenants.map(t => t.unit_id))
       const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
       await updateSession(from, { step: 'awaiting_tenant_selection' })
-      return await sendListMenu(from, "🔍 Select Tenant", "Choose:", "Select", [{ title: "ACTIVE", rows: (tenants || []).map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+      return await sendListMenu(from, "🔍 Select Tenant", "Choose:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
 
-    // 4. Session Steps
+    // 4. Session Handling
     const session = await getSession(from)
     if (session) {
       if (session.step === 'awaiting_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         const { data: bills } = await supabase.from('utility_bills').select('billing_month').eq('tenant_id', tenantId).order('billing_month', { ascending: false }).limit(5)
+        if (!bills?.length) return await sendButtons(from, `📭 No history`, ["Main Menu", "Get Unit Bill"])
         await updateSession(from, { step: 'awaiting_month_selection', tenant_id: tenantId })
-        return await sendListMenu(from, `📅 Select Month`, "Choose:", "Select", [{ title: "MONTHS", rows: (bills || []).map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
+        return await sendListMenu(from, `📅 Select Month`, "Choose:", "Select", [{ title: "MONTHS", rows: bills.map(b => ({ id: `month_${b.billing_month}`, title: b.billing_month })) }])
       }
       if (session.step === 'awaiting_month_selection') {
         const month = listId?.replace('month_', '')
@@ -149,18 +115,20 @@ export async function POST(req) {
     // 5. Action Fallbacks
     if (listId === 'path_unpaid' || input === 'unpaid bills') {
       const { data: bills } = await supabase.from('utility_bills').select(`total_amount, billing_month, tenant_id`).eq('user_id', profile.id).order('billing_month', { ascending: false }).limit(10)
-      let r = `🚩 Outstanding Bills:\n\n`; bills?.forEach(b => { r += `▫️ ${b.billing_month}: ₹${b.total_amount}\n` })
-      return await sendButtons(from, r || "✅ All Paid.", ["Main Menu"])
+      if (!bills?.length) return await sendButtons(from, "✅ All Paid.", ["Main Menu"])
+      const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').in('id', bills.map(b => b.tenant_id))
+      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
+      const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
+      let r = `🚩 Outstanding Bills:\n\n`; bills.forEach(b => { r += `▫️ ${uMap[b.tenant_id]}: ₹${parseFloat(b.total_amount).toLocaleString()}\n` })
+      return await sendButtons(from, r, ["Main Menu"])
     }
 
-    // 6. AI Natural Language Search
-    if (text.length > 2) {
-      await handleAISearch(from, profile.id, text)
-    }
-    
+    // 6. Generic Help
+    await sendText(from, "❓ Sorry, I didn't understand that. Please send *Hi* to see the menu.")
     return NextResponse.json({ ok: true })
+
   } catch (err) {
-    console.error('SERVER ERROR:', err)
+    console.error('Bot Error:', err)
     return NextResponse.json({ ok: true })
   }
 }
