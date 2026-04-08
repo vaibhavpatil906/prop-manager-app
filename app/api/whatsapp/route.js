@@ -7,8 +7,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder'
 )
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "")
-
 // --- WHATSAPP HELPERS ---
 async function callWhatsApp(to, messageData) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN
@@ -53,45 +51,39 @@ async function clearSession(phone) {
   await supabase.from('bot_sessions').delete().eq('phone', phone)
 }
 
-// --- AI ENGINE WITH AUTO-FALLBACK ---
+// --- AI ENGINE WITH STABLE V1 API ---
 async function handleAISearch(from, profileId, userQuery) {
-  if (!process.env.GEMINI_API_KEY) return await sendText(from, "⚠️ AI Key Missing.")
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) return await sendText(from, "⚠️ AI Key Missing in Vercel.")
 
   try {
-    // 1. Fetch Context
+    // Force stable v1 API and try the standard model name
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+
+    // 1. Fetch Basic Context
     const { data: tenants } = await supabase.from('tenants').select('name, unit_id').eq('user_id', profileId)
     const { data: units } = await supabase.from('units').select('id, unit_number, rent')
     const context = (tenants || []).map(t => {
       const u = (units || []).find(un => un.id === t.unit_id)
-      return `${t.name} is in unit ${u?.unit_number || '?'}. Rent: ₹${u?.rent || '?'}`
+      return `${t.name} is in unit ${u?.unit_number || 'Unknown'}`
     }).join('. ')
 
-    const prompt = `Assistant for PropManager. Context: ${context || 'Empty'}. Question: ${userQuery}. Instruction: 1 sentence answer.`
+    const prompt = `System: Property Assistant. Records: ${context || 'None'}. Answer this concisely: ${userQuery}`
 
-    // 2. Try multiple model names to solve 404 errors
-    const models = ["gemini-pro", "gemini-1.5-flash", "gemini-1.0-pro"]
-    let aiResponse = ""
-    let success = false
-
-    for (const modelName of models) {
-      if (success) break
-      try {
-        const model = genAI.getGenerativeModel({ model: modelName })
-        const result = await model.generateContent(prompt)
-        aiResponse = result.response.text()
-        success = true
-      } catch (err) {
-        console.error(`AI Fail (${modelName}):`, err.message)
-      }
-    }
-
-    if (success) {
-      await sendText(from, `🤖 *AI Assistant*\n\n${aiResponse}`)
-    } else {
-      await sendText(from, "🤖 Sorry, I couldn't reach my AI brain. Please use the Menu buttons below.")
-    }
+    const result = await model.generateContent(prompt)
+    const aiResponse = result.response.text()
+    
+    await sendText(from, `🤖 *AI Assistant*\n\n${aiResponse}`)
   } catch (err) {
-    console.error('Final AI Error:', err)
+    console.error('AI Error Detail:', err)
+    
+    // If it's a 404, suggest checking the API Key dashboard
+    if (err.message?.includes('404') || err.message?.includes('not found')) {
+      await sendText(from, "🤖 *AI Config Error*: The AI model was not found. Please ensure your API Key from Google AI Studio is active and 'Generative Language API' is enabled.")
+    } else {
+      await sendText(from, `🤖 *AI Error*: ${err.message?.substring(0, 100)}`)
+    }
   }
 }
 
