@@ -89,18 +89,20 @@ export async function POST(req) {
 
     // 3. Handle Active Session Steps
     if (session) {
-      // PAYMENT STEPS
+      // --- PAYMENT RECORDING STEPS ---
       if (session.step === 'awaiting_payment_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         if (!tenantId) return NextResponse.json({ ok: true })
+        const { data: tenant } = await supabase.from('tenants').select('name, unit:units(unit_number)').eq('id', tenantId).single()
         const { data: bills } = await supabase.from('utility_bills').select('id, billing_month, balance_due').eq('tenant_id', tenantId).gt('balance_due', 0).order('billing_month', { ascending: false })
+        
         if (!bills?.length) {
           await clearSession(from)
-          await sendButtons(from, "✅ This tenant has no pending balance.", ["Main Menu", "Record Payment"])
+          await sendButtons(from, `✅ *${tenant.name}* has no pending balance.`, ["Main Menu", "Record Payment"])
           return NextResponse.json({ ok: true })
         }
-        await updateSession(from, { step: 'awaiting_bill_selection', tenant_id: tenantId })
-        await sendListMenu(from, `💰 Select Bill`, "Which bill are they paying?", "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${b.balance_due})` })) }])
+        await updateSession(from, { step: 'awaiting_bill_selection', tenant_id: tenantId, tenant_name: tenant.name, unit_num: tenant.unit?.unit_number })
+        await sendListMenu(from, `💰 Select Bill`, "Which month are they paying?", "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${parseFloat(b.balance_due).toLocaleString()})` })) }])
         return NextResponse.json({ ok: true })
       }
 
@@ -108,29 +110,47 @@ export async function POST(req) {
         const billId = listId?.replace('bill_', '')
         if (!billId) return NextResponse.json({ ok: true })
         const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', billId).single()
-        await updateSession(from, { step: 'awaiting_payment_amount', bill_id: billId, bill_total: bill.balance_due })
-        await sendText(from, `💸 *Balance:* ₹${bill.balance_due}\nHow much was received?`)
+        await updateSession(from, { step: 'awaiting_payment_amount', bill_id: billId, bill_month: bill.billing_month, bill_total: bill.balance_due })
+        await sendText(from, `💸 *Pending for ${bill.billing_month}:* ₹${parseFloat(bill.balance_due).toLocaleString()}\n\nHow much was received?`)
         return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'awaiting_payment_amount') {
         const amt = parseFloat(text)
-        if (isNaN(amt)) {
-          await sendText(from, "❌ Please enter a valid number.")
-          return NextResponse.json({ ok: true })
-        }
-        const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', session.bill_id).single()
-        const newBalance = bill.balance_due - amt
-        const { data: pendPay } = await supabase.from('payments').select('id').eq('bill_id', session.bill_id).eq('status', 'Pending').limit(1).single()
-        if (pendPay) await supabase.from('payments').update({ amount: amt, status: 'Paid', payment_date: new Date() }).eq('id', pendPay.id)
-        await supabase.from('utility_bills').update({ balance_due: Math.max(0, newBalance) }).eq('id', session.bill_id)
-        if (newBalance > 0) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBalance, status: 'Pending', method: 'Partial Balance', due_date: bill.due_date })
-        await clearSession(from)
-        await sendButtons(from, `✅ *Payment Recorded*\n💰 Received: ₹${amt}\n🚩 Remaining: ₹${Math.max(0, newBalance)}`, ["Main Menu", "Record Payment"])
+        if (isNaN(amt)) return await sendText(from, "❌ Please enter a valid number.")
+        await updateSession(from, { step: 'awaiting_payment_method', payment_amt: amt })
+        await sendButtons(from, `💰 Received: ₹${amt.toLocaleString()}\n\nSelect payment method:`, ["Cash", "UPI", "Bank Transfer"])
         return NextResponse.json({ ok: true })
       }
 
-      // READING STEPS
+      if (session.step === 'awaiting_payment_method') {
+        const amt = session.payment_amt
+        const method = text
+        const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', session.bill_id).single()
+        const newBalance = bill.balance_due - amt
+        
+        const { data: pendPay } = await supabase.from('payments').select('id').eq('bill_id', session.bill_id).eq('status', 'Pending').limit(1).single()
+        if (pendPay) await supabase.from('payments').update({ amount: amt, status: 'Paid', method: method, payment_date: new Date() }).eq('id', pendPay.id)
+        else await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: amt, status: 'Paid', method: method, payment_date: new Date(), due_date: bill.due_date })
+
+        await supabase.from('utility_bills').update({ balance_due: Math.max(0, newBalance) }).eq('id', session.bill_id)
+        if (newBalance > 0) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBalance, status: 'Pending', method: 'Partial Balance', due_date: bill.due_date })
+        
+        await clearSession(from)
+        const receipt = `✅ *Payment Recorded*\n` +
+                        `👤 *Tenant:* ${session.tenant_name}\n` +
+                        `🏠 *Unit:* ${session.unit_num}\n` +
+                        `📅 *Month:* ${session.bill_month}\n` +
+                        `_________________________\n` +
+                        `💰 *Amount:* ₹${amt.toLocaleString()}\n` +
+                        `💳 *Method:* ${method}\n` +
+                        `🚩 *Remaining:* ₹${Math.max(0, newBalance).toLocaleString()}\n` +
+                        `_________________________`
+        await sendButtons(from, receipt, ["Main Menu", "Record Payment"])
+        return NextResponse.json({ ok: true })
+      }
+
+      // --- READING SUBMISSION STEPS ---
       if (session.step === 'awaiting_unit_reading') {
         const unitNum = text.toUpperCase()
         const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', unitNum).single()
@@ -147,20 +167,14 @@ export async function POST(req) {
 
       if (session.step === 'awaiting_reading_value') {
         const curr = parseFloat(text)
-        if (isNaN(curr)) {
-          await sendText(from, "❌ Please enter a valid number.")
-          return NextResponse.json({ ok: true })
-        }
+        if (isNaN(curr)) return await sendText(from, "❌ Please send a valid number.")
         await updateSession(from, { step: 'awaiting_water_value', curr_reading: curr })
         await sendButtons(from, `📟 *Current:* ${curr}`, ["Skip (140)", "Enter Custom"])
         return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'awaiting_water_value') {
-        if (input === 'enter custom') {
-          await sendText(from, "Type water amount:")
-          return NextResponse.json({ ok: true })
-        }
+        if (input === 'enter custom') return await sendText(from, "Type water amount:")
         const water = input === 'skip (140)' ? 140 : parseFloat(text)
         const unitsUsed = session.curr_reading - session.prev_reading
         const elec = Math.max(unitsUsed * 10, 150)
@@ -172,7 +186,7 @@ export async function POST(req) {
         return NextResponse.json({ ok: true })
       }
 
-      // LOOKUP STEPS
+      // --- LOOKUP & REPORT STEPS ---
       if (session.step === 'awaiting_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         if (!tenantId) return NextResponse.json({ ok: true })
@@ -202,19 +216,8 @@ export async function POST(req) {
       if (session.step === 'awaiting_report_month_selection') {
         const monthCode = listId?.replace('report_', '')
         if (!monthCode) return NextResponse.json({ ok: true })
-        const { data: bills } = await supabase.from('utility_bills').select('*').eq('user_id', profile.id).eq('billing_month', monthCode)
-        if (!bills?.length) {
-          await clearSession(from)
-          await sendButtons(from, `📭 No data for ${monthCode}`, ["Main Menu", "Monthly Report"])
-          return NextResponse.json({ ok: true })
-        }
-        const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').in('id', bills.map(b => b.tenant_id))
-        const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
-        const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
-        let r = `📊 *Report: ${monthCode}*\n\n`; let gt = 0
-        bills.forEach(b => { const t = parseFloat(b.total_amount); r += `🏠 *${uMap[b.tenant_id]}* (${tMap[b.tenant_id]}): ₹${t.toLocaleString()}\n`; gt += t })
+        await generateMonthlyReport(from, profile.id, monthCode)
         await clearSession(from)
-        await sendButtons(from, r + `\n⭐ *TOTAL: ₹${gt.toLocaleString()}*`, ["Main Menu", "Monthly Report"])
         return NextResponse.json({ ok: true })
       }
     }
@@ -227,29 +230,17 @@ export async function POST(req) {
     }
 
     if (listId === 'path_pay_rec' || input === 'record payment') {
-      const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) {
-        await sendText(from, "🏠 No active tenants.")
-        return NextResponse.json({ ok: true })
-      }
-      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', tenants.map(t => t.unit_id))
-      const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
+      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
+      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
       await updateSession(from, { step: 'awaiting_payment_tenant_selection' })
-      await sendListMenu(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
-      return NextResponse.json({ ok: true })
+      return await sendListMenu(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
     
     if (listId === 'path_lookup' || input === 'get unit bill') {
-      const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) {
-        await sendText(from, "🏠 No active tenants.")
-        return NextResponse.json({ ok: true })
-      }
-      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', tenants.map(t => t.unit_id))
-      const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
+      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
+      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
       await updateSession(from, { step: 'awaiting_tenant_selection' })
-      await sendListMenu(from, "🔍 Select Tenant", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
-      return NextResponse.json({ ok: true })
+      return await sendListMenu(from, "🔍 Select Tenant", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
 
     if (listId === 'path_summary' || input === 'property summary') {
@@ -267,20 +258,15 @@ export async function POST(req) {
 
     if (listId === 'path_unpaid' || input === 'unpaid bills') {
       const { data: bills } = await supabase.from('utility_bills').select(`total_amount, balance_due, billing_month, tenant_id`).eq('user_id', profile.id).gt('balance_due', 0).order('billing_month', { ascending: false })
-      if (!bills?.length) {
-        await sendButtons(from, "✅ All paid!", ["Main Menu"])
-        return NextResponse.json({ ok: true })
-      }
-      const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').in('id', bills.map(b => b.tenant_id))
-      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', (tenants || []).map(t => t.unit_id))
-      const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, (units || []).find(u => u.id === t.unit_id)?.unit_number || 'Unit']))
+      if (!bills?.length) return await sendButtons(from, "✅ All paid!", ["Main Menu"])
+      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
+      const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || 'Unit']))
       let r = `🚩 *Outstanding*\n\n`; const grouped = bills.reduce((acc, b) => { acc[b.billing_month] = acc[b.billing_month] || []; acc[b.billing_month].push(b); return acc }, {})
       for (const [month, mBills] of Object.entries(grouped)) { r += `📅 *${month}*\n`; mBills.forEach(b => { r += `▫️ ${uMap[b.tenant_id]} (${tMap[b.tenant_id]}): ₹${parseFloat(b.balance_due).toLocaleString()}\n` }); r += `\n` }
       await sendButtons(from, r, ["Main Menu", "Record Payment"])
       return NextResponse.json({ ok: true })
     }
 
-    // 5. Catch-all
     await sendText(from, "❓ Send *Hi* for menu.")
     return NextResponse.json({ ok: true })
 
@@ -288,6 +274,32 @@ export async function POST(req) {
     console.error('Bot Error:', err)
     return NextResponse.json({ ok: true })
   }
+}
+
+async function generateMonthlyReport(from, profileId, targetMonth) {
+  const { data: bills } = await supabase.from('utility_bills').select('*').eq('user_id', profileId).eq('billing_month', targetMonth)
+  if (!bills?.length) return await sendButtons(from, `📭 No data for ${targetMonth}`, ["Main Menu", "Monthly Report"])
+  const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
+  const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || 'Unit']))
+  
+  let totalBilled = 0; let totalCollected = 0
+  let r = `📊 *Report: ${targetMonth}*\n\n`
+  bills.forEach(b => {
+    const billed = parseFloat(b.total_amount)
+    const due = parseFloat(b.balance_due)
+    const collected = billed - due
+    r += `🏠 *${uMap[b.tenant_id]}* (${tMap[b.tenant_id]})\n` +
+         `   Billed: ₹${billed.toLocaleString()} | Collected: ₹${collected.toLocaleString()}\n` +
+         `_________________________\n\n`
+    totalBilled += billed
+    totalCollected += collected
+  })
+  
+  const footer = `⭐ *TOTAL BILLED:* ₹${totalBilled.toLocaleString()}\n` +
+                 `💰 *TOTAL COLLECTED:* ₹${totalCollected.toLocaleString()}\n` +
+                 `🚩 *TOTAL PENDING:* ₹${(totalBilled - totalCollected).toLocaleString()}`
+  
+  await sendButtons(from, r + footer, ["Main Menu", "Monthly Report"])
 }
 
 export async function GET(req) {
