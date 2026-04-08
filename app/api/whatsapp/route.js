@@ -75,7 +75,10 @@ export async function POST(req) {
     if (['hi', 'hello', 'menu', 'start', 'hey', 'cancel'].includes(input) || listId === 'nav_main') {
       await clearSession(from)
       await sendListMenu(from, `👋 PropManager Home`, "Select an action:", "Menu", [
-        { title: "⚡ ACTIONS", rows: [{ id: "path_reading", title: "Submit Reading" }] },
+        { title: "⚡ RECORD", rows: [
+          { id: "path_reading", title: "Submit Reading" },
+          { id: "path_pay_rec", title: "Record Payment" }
+        ]},
         { title: "📊 REPORTS", rows: [{ id: "path_monthly", title: "Monthly Report" }, { id: "path_unpaid", title: "Unpaid Bills" }] },
         { title: "🔍 LOOKUP", rows: [{ id: "path_lookup", title: "Get Unit Bill" }, { id: "path_summary", title: "Property Summary" }] }
       ])
@@ -85,6 +88,51 @@ export async function POST(req) {
     // 3. Session Handling (Ongoing Tasks)
     const session = await getSession(from)
     if (session) {
+      // --- Payment Recording Steps ---
+      if (session.step === 'awaiting_payment_tenant_selection') {
+        const tenantId = listId?.replace('tenant_', '')
+        const { data: bills } = await supabase.from('utility_bills').select('id, billing_month, balance_due').eq('tenant_id', tenantId).gt('balance_due', 0).order('billing_month', { ascending: false })
+        
+        if (!bills?.length) {
+          await clearSession(from)
+          return await sendButtons(from, "✅ This tenant has no pending balance.", ["Main Menu", "Record Payment"])
+        }
+        
+        await updateSession(from, { step: 'awaiting_bill_selection', tenant_id: tenantId })
+        return await sendListMenu(from, `💰 Select Bill`, "Which bill are they paying?", "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${b.balance_due})` })) }])
+      }
+
+      if (session.step === 'awaiting_bill_selection') {
+        const billId = listId?.replace('bill_', '')
+        const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', billId).single()
+        await updateSession(from, { step: 'awaiting_payment_amount', bill_id: billId, bill_total: bill.balance_due })
+        return await sendText(from, `💸 *Balance:* ₹${bill.balance_due}\nHow much was received?`)
+      }
+
+      if (session.step === 'awaiting_payment_amount') {
+        const amt = parseFloat(text)
+        if (isNaN(amt)) return await sendText(from, "❌ Please enter a number.")
+        
+        const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', session.bill_id).single()
+        const newBalance = bill.balance_due - amt
+        
+        // 1. Mark existing pending payment as Paid
+        const { data: pendPay } = await supabase.from('payments').select('id').eq('bill_id', session.bill_id).eq('status', 'Pending').limit(1).single()
+        if (pendPay) {
+          await supabase.from('payments').update({ amount: amt, status: 'Paid', payment_date: new Date() }).eq('id', pendPay.id)
+        }
+
+        // 2. Update Bill Balance
+        await supabase.from('utility_bills').update({ balance_due: Math.max(0, newBalance) }).eq('id', session.bill_id)
+
+        // 3. Create new lookup if partial
+        if (newBalance > 0) {
+          await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBalance, status: 'Pending', method: 'Partial Balance', due_date: bill.due_date })
+        }
+
+        await clearSession(from)
+        return await sendButtons(from, `✅ *Payment Recorded*\n💰 Received: ₹${amt}\n🚩 Remaining: ₹${Math.max(0, newBalance)}`, ["Main Menu", "Record Payment"])
+      }
       // --- Reading Submission Steps ---
       if (session.step === 'awaiting_unit_reading') {
         const unitNum = text.toUpperCase()
@@ -110,13 +158,39 @@ export async function POST(req) {
         const water = input === 'skip (140)' ? 140 : parseFloat(text)
         if (isNaN(water)) return await sendText(from, "❌ Please send a valid number.")
         
-        const units = session.curr_reading - session.prev_reading
-        const elec = Math.max(units * 10, 150)
+        const unitsUsed = session.curr_reading - session.prev_reading
+        const elec = Math.max(unitsUsed * 10, 150)
         const total = parseFloat(session.rent) + elec + water
         
-        await supabase.from('utility_bills').upsert({ user_id: profile.id, tenant_id: session.tenant_id, billing_month: new Date().toISOString().slice(0, 7), prev_reading: session.prev_reading, curr_reading: session.curr_reading, rate_per_unit: 10, fixed_rent: session.rent, water_bill: water, total_amount: total, due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] })
+        // 1. Create the Bill
+        const { data: bill, error: billErr } = await supabase.from('utility_bills').upsert({ 
+          user_id: profile.id, 
+          tenant_id: session.tenant_id, 
+          billing_month: new Date().toISOString().slice(0, 7), 
+          prev_reading: session.prev_reading, 
+          curr_reading: session.curr_reading, 
+          rate_per_unit: 10, 
+          fixed_rent: session.rent, 
+          water_bill: water, 
+          total_amount: total,
+          balance_due: total, // Track remaining balance
+          due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] 
+        }).select().single()
+
+        if (!billErr && bill) {
+          // 2. Create the linked Payment record (Status: Pending)
+          await supabase.from('payments').insert({
+            tenant_id: session.tenant_id,
+            bill_id: bill.id,
+            amount: total,
+            status: 'Pending',
+            method: 'Utility Bill',
+            due_date: bill.due_date
+          })
+        }
+
         await clearSession(from)
-        return await sendButtons(from, `✅ *Bill Saved for ${session.unit_num}*\n💰 Total: ₹${total.toLocaleString()}`, ["Main Menu", "Submit Reading"])
+        return await sendButtons(from, `✅ *Bill Generated & Linked*\n🏠 Unit: ${session.unit_num}\n💰 Total: ₹${total.toLocaleString()}\n💳 Status: Pending Payment`, ["Main Menu", "Submit Reading"])
       }
 
       // --- Bill Lookup Steps ---
@@ -176,6 +250,15 @@ export async function POST(req) {
     if (listId === 'path_reading' || input === 'submit reading') {
       await updateSession(from, { step: 'awaiting_unit_reading' })
       return await sendText(from, "📝 Which Unit? (e.g. G01)")
+    }
+
+    if (listId === 'path_pay_rec' || input === 'record payment') {
+      const { data: tenants } = await supabase.from('tenants').select('id, name, unit_id').eq('user_id', profile.id).eq('status', 'Active')
+      if (!tenants?.length) return await sendText(from, "🏠 No active tenants.")
+      const { data: units } = await supabase.from('units').select('id, unit_number').in('id', tenants.map(t => t.unit_id))
+      const uMap = Object.fromEntries((units || []).map(u => [u.id, u.unit_number]))
+      await updateSession(from, { step: 'awaiting_payment_tenant_selection' })
+      return await sendListMenu(from, "💰 Record Payment", "Which tenant is paying?", "Select", [{ title: "ACTIVE", rows: tenants.map(t => ({ id: `tenant_${t.id}`, title: `${uMap[t.unit_id] || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
     }
     
     if (listId === 'path_lookup' || input === 'get unit bill') {
