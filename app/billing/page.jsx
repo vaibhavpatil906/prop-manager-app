@@ -17,9 +17,9 @@ function InvoiceModal({ data, onClose }) {
   }, [user])
 
   const print = () => window.print()
-  const energyUnits = data.curr_reading - data.prev_reading
+  const energyUnits = Math.max(0, data.curr_reading - data.prev_reading)
   let energyBill = energyUnits * data.rate_per_unit
-  if (energyBill > 0 && energyBill < 150) energyBill = 150
+  if (energyBill < 150) energyBill = 150
   
   const displayMonth = data.billing_month ? new Date(data.billing_month + '-02').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'
   
