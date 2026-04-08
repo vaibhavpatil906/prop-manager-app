@@ -218,8 +218,12 @@ export default function Billing() {
 
   const calculateRowTotal = (row) => {
     const energyUnits = Math.max(0, (parseFloat(row.curr_reading) || 0) - (parseFloat(row.prev_reading) || 0))
-    let energyBill = energyUnits * (parseFloat(form.rate_per_unit) || 10)
-    if (energyBill > 0 && energyBill < 150) energyBill = 150
+    const rate = parseFloat(form.rate_per_unit) || 10
+    
+    // Logic: If there is a reading, the minimum charge is ₹150
+    let energyBill = energyUnits * rate
+    if (energyBill < 150) energyBill = 150
+    
     return (parseFloat(row.fixed_rent) || 0) + energyBill + (parseFloat(row.water_bill) || 0) + (parseFloat(row.other_utilities) || 0)
   }
 
