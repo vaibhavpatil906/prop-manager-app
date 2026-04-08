@@ -117,13 +117,18 @@ export async function POST(req) {
       }
 
       if (session.step === 'awaiting_payment_amount') {
+        console.log('BOT: Processing payment amount:', text)
         const amt = parseFloat(text)
         if (isNaN(amt)) {
+          console.log('BOT: Invalid amount entered')
           await sendText(from, "❌ Please enter a valid number (e.g., 5000).")
           return NextResponse.json({ ok: true })
         }
+        console.log('BOT: Updating session to awaiting_payment_method')
         await updateSession(from, { step: 'awaiting_payment_method', payment_amt: amt })
-        await sendButtons(from, `💰 Received: ₹${amt.toLocaleString()}\n\nSelect payment method:`, ["Cash", "UPI", "Bank Transfer"])
+        console.log('BOT: Sending method selection buttons')
+        const sent = await sendButtons(from, `💰 Received: ₹${amt.toLocaleString()}\n\nSelect payment method:`, ["Cash", "UPI", "Bank Transfer"])
+        console.log('BOT: Button send result:', sent?.status)
         return NextResponse.json({ ok: true })
       }
 
