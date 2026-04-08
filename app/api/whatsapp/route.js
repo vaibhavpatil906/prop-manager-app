@@ -235,6 +235,12 @@ async function generateMonthlyReport(from, profileId, targetMonth) {
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url)
-  if (searchParams.get('hub.verify_token') === process.env.WHATSAPP_VERIFY_TOKEN) return new Response(searchParams.get('hub.challenge'))
-  return new Response('Forbidden', { status: 403 })
+  const mode = searchParams.get('hub.mode')
+  const token = searchParams.get('hub.verify_token')
+  const challenge = searchParams.get('hub.challenge')
+
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    return new Response(challenge, { status: 200 })
+  }
+  return new Response('PropManager WhatsApp API is Live. Please use POST for messages.', { status: 200 })
 }
