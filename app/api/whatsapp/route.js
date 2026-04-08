@@ -66,11 +66,11 @@ const fmt = (val) => parseFloat(val || 0).toLocaleString('en-IN')
 
 // --- MAIN BOT HANDLER ---
 export async function POST(req) {
+  console.log('--- NEW INCOMING REQUEST ---')
   let from = 'unknown'
   try {
     const body = await req.json()
-    const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
-    if (!message) return ok()
+    console.log('[BOT] Body:', JSON.stringify(body))
 
     from = message.from
     const cleanPhone = from.replace(/\D/g, '')
