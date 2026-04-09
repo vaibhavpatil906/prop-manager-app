@@ -57,8 +57,16 @@ export async function POST(req) {
     const cleanPhone = from.replace(/\D/g, '')
 
     // 1. Auth check
-    const { data: profile } = await supabase.from('profiles').select('*').ilike('contact_number', `%${cleanPhone}%`).single()
-    if (!profile) { await sendText(from, `⚠️ Access denied.`); return ok() }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .or(`contact_number.ilike.%${cleanPhone}%,additional_number.ilike.%${cleanPhone}%`)
+      .single()
+
+    if (!profile) {
+      await sendText(from, `⚠️ Unauthorized: ${from}. Please register this number in settings.`)
+      return ok()
+    }
 
     const text = (message.text?.body || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "").trim()
     const listId = message.interactive?.list_reply?.id

@@ -14,6 +14,7 @@ export default function Settings() {
     business_address: '',
     business_logo: '',
     contact_number: '',
+    additional_number: '',
     upi_id: '',
     first_name: '',
     last_name: ''
@@ -47,6 +48,7 @@ export default function Settings() {
       business_address: profile.business_address,
       business_logo: profile.business_logo,
       contact_number: profile.contact_number,
+      additional_number: profile.additional_number,
       upi_id: profile.upi_id,
       updated_at: new Date()
     })
@@ -113,6 +115,10 @@ export default function Settings() {
                   <div>
                     <label style={labelS}>Operator Contact</label>
                     <input value={profile.contact_number} onChange={e => setProfile({...profile, contact_number: e.target.value})} placeholder="+91 ..." style={inputS} className="focus-indigo" />
+                  </div>
+                  <div>
+                    <label style={labelS}>Additional WhatsApp Number</label>
+                    <input value={profile.additional_number || ''} onChange={e => setProfile({...profile, additional_number: e.target.value})} placeholder="+91 ..." style={inputS} className="focus-indigo" />
                   </div>
                 </div>
 
