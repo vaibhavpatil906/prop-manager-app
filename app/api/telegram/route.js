@@ -7,37 +7,13 @@ const supabase = createClient(
 )
 
 // ---------------- TELEGRAM API ----------------
-async function callTelegram(method, data) {
+async function tg(method, data) {
   const token = process.env.TELEGRAM_BOT_TOKEN
-
   return fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }).then(res => res.json())
-}
-
-// ---------------- UI ENGINE ----------------
-const tgUI = {
-  send: async (chatId, text, keyboard) => {
-    const res = await callTelegram('sendMessage', {
-      chat_id: chatId,
-      text,
-      parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: keyboard }
-    })
-    return res?.result?.message_id
-  },
-
-  edit: async (chatId, messageId, text, keyboard) => {
-    return callTelegram('editMessageText', {
-      chat_id: chatId,
-      message_id: messageId,
-      text,
-      parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: keyboard }
-    })
-  }
 }
 
 // ---------------- SESSION ----------------
@@ -46,30 +22,64 @@ const db = {
     const { data } = await supabase.from('bot_sessions').select('*').eq('phone', k).maybeSingle()
     return data
   },
-  set: (k, d) => supabase.from('bot_sessions').upsert({ phone: k, ...d, updated_at: new Date() }),
-  clear: (k) => supabase.from('bot_sessions').delete().eq('phone', k)
+  set: async (k, d) => {
+    await supabase.from('bot_sessions').upsert({
+      phone: k,
+      ...d,
+      updated_at: new Date()
+    })
+  },
+  clear: async (k) => {
+    await supabase.from('bot_sessions').delete().eq('phone', k)
+  }
 }
 
-// ---------------- SCREEN RENDER ----------------
+// ---------------- UI ENGINE ----------------
 async function render(chatId, session, text, keyboard) {
-  if (session?.message_id) {
-    await tgUI.edit(chatId, session.message_id, text, keyboard)
-  } else {
-    const msgId = await tgUI.send(chatId, text, keyboard)
-    await db.set(`tg_${chatId}`, { message_id: msgId })
+  try {
+    if (session?.message_id) {
+      await tg('editMessageText', {
+        chat_id: chatId,
+        message_id: session.message_id,
+        text,
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: keyboard }
+      })
+    } else {
+      const res = await tg('sendMessage', {
+        chat_id: chatId,
+        text,
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: keyboard }
+      })
+
+      await db.set(`tg_${chatId}`, {
+        ...session,
+        message_id: res?.result?.message_id
+      })
+    }
+  } catch (e) {
+    // fallback (prevents loop)
+    const res = await tg('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: keyboard }
+    })
+
+    await db.set(`tg_${chatId}`, {
+      ...session,
+      message_id: res?.result?.message_id
+    })
   }
 }
 
 // ---------------- SCREENS ----------------
-
-// MAIN MENU
-async function showMenu(chatId, session) {
+async function menu(chatId, session) {
   await render(chatId, session,
 `👋 *PropManager Pro*
 
-🏢 Manage your property
-
-Choose action:`,
+🏢 Manage properties easily`,
 [
   [{ text: "📟 Submit Reading", callback_data: "reading" }],
   [{ text: "💰 Record Payment", callback_data: "payment" }],
@@ -77,8 +87,7 @@ Choose action:`,
 ])
 }
 
-// TENANT LIST
-async function showTenants(chatId, session, profileId, step) {
+async function tenantList(chatId, session, profileId, type) {
   const { data: tenants } = await supabase
     .from('tenants')
     .select('id, name, unit:units(unit_number)')
@@ -89,45 +98,31 @@ async function showTenants(chatId, session, profileId, step) {
     return render(chatId, session, "❌ No tenants found", [[{ text: "⬅️ Back", callback_data: "menu" }]])
   }
 
-  const keyboard = tenants.map(t => ([{
+  const buttons = tenants.map(t => ([{
     text: `${t.unit?.unit_number || '?'} - ${t.name}`,
-    callback_data: `${step}_${t.id}`
+    callback_data: `${type}_${t.id}`
   }]))
 
-  keyboard.push([{ text: "⬅️ Back", callback_data: "menu" }])
+  buttons.push([{ text: "⬅️ Back", callback_data: "menu" }])
 
   await render(chatId, session,
-`👤 *Select Tenant*
-
-Choose from list:`,
-keyboard)
+`👤 *Select Tenant*`,
+buttons)
 }
 
-// READING INPUT
-async function showReadingInput(chatId, session) {
+async function readingScreen(chatId, session) {
   await render(chatId, session,
-`📟 *Submit Reading*
-
-👤 Tenant selected
-
-Enter current reading:`,
-[
-  [{ text: "⬅️ Back", callback_data: "reading" }]
-])
+`📟 *Enter Reading*`,
+[[{ text: "⬅️ Back", callback_data: "reading" }]])
 }
 
-// PAYMENT INPUT
-async function showPaymentInput(chatId, session) {
+async function paymentScreen(chatId, session) {
   await render(chatId, session,
-`💰 *Record Payment*
-
-Enter amount:`,
-[
-  [{ text: "⬅️ Back", callback_data: "payment" }]
-])
+`💰 *Enter Amount*`,
+[[{ text: "⬅️ Back", callback_data: "payment" }]])
 }
 
-// ---------------- MAIN HANDLER ----------------
+// ---------------- HANDLER ----------------
 export async function POST(req) {
   try {
     const body = await req.json()
@@ -139,16 +134,21 @@ export async function POST(req) {
     if (!chatId) return NextResponse.json({ ok: true })
 
     if (cb) {
-      await callTelegram('answerCallbackQuery', { callback_query_id: cb.id })
+      await tg('answerCallbackQuery', { callback_query_id: cb.id })
     }
 
     const raw = msg?.text || cb?.data || ""
     const input = raw.toLowerCase()
 
-    const sessionKey = `tg_${chatId}`
-    const session = await db.get(sessionKey)
+    const key = `tg_${chatId}`
+    let session = await db.get(key) || {}
 
-    // AUTH (IMPORTANT)
+    // prevent loop
+    if (session.last_action === input) {
+      return NextResponse.json({ ok: true })
+    }
+
+    // AUTH
     const { data: profile } = await supabase
       .from('profiles')
       .select('*')
@@ -156,117 +156,71 @@ export async function POST(req) {
       .maybeSingle()
 
     if (!profile) {
-      await callTelegram('sendMessage', {
-        chat_id: chatId,
-        text: "❌ Unauthorized user"
-      })
+      await tg('sendMessage', { chat_id: chatId, text: "❌ Unauthorized" })
       return NextResponse.json({ ok: true })
     }
 
-    // ---------------- MENU ----------------
+    // MENU
     if (input.startsWith('/') || input === 'menu') {
-      await db.clear(sessionKey)
-      await showMenu(chatId, {})
+      await db.clear(key)
+      await menu(chatId, {})
       return NextResponse.json({ ok: true })
     }
 
-    // ---------------- NAVIGATION ----------------
+    // NAV
     if (input === 'reading') {
-      await db.set(sessionKey, { step: 'READ_TENANT' })
-      await showTenants(chatId, session, profile.id, "read")
+      await db.set(key, { ...session, step: 'READ_TENANT', last_action: input })
+      await tenantList(chatId, session, profile.id, "read")
       return NextResponse.json({ ok: true })
     }
 
     if (input === 'payment') {
-      await db.set(sessionKey, { step: 'PAY_TENANT' })
-      await showTenants(chatId, session, profile.id, "pay")
+      await db.set(key, { ...session, step: 'PAY_TENANT', last_action: input })
+      await tenantList(chatId, session, profile.id, "pay")
       return NextResponse.json({ ok: true })
     }
 
-    if (input === 'menu') {
-      await db.clear(sessionKey)
-      await showMenu(chatId, session)
-      return NextResponse.json({ ok: true })
-    }
-
-    // ---------------- TENANT SELECT ----------------
+    // SELECT TENANT
     if (input.startsWith('read_')) {
-      const tenantId = input.replace('read_', '')
-
-      await db.set(sessionKey, {
-        step: 'READ_VALUE',
-        tenant_id: tenantId
-      })
-
-      await showReadingInput(chatId, session)
+      await db.set(key, { ...session, step: 'READ_VALUE', tenant_id: input.split('_')[1], last_action: input })
+      await readingScreen(chatId, session)
       return NextResponse.json({ ok: true })
     }
 
     if (input.startsWith('pay_')) {
-      const tenantId = input.replace('pay_', '')
-
-      await db.set(sessionKey, {
-        step: 'PAY_AMOUNT',
-        tenant_id: tenantId
-      })
-
-      await showPaymentInput(chatId, session)
+      await db.set(key, { ...session, step: 'PAY_AMOUNT', tenant_id: input.split('_')[1], last_action: input })
+      await paymentScreen(chatId, session)
       return NextResponse.json({ ok: true })
     }
 
-    // ---------------- FLOW ----------------
-    if (session) {
-
-      if (session.step === 'READ_VALUE') {
-        const val = parseFloat(raw)
-
-        if (isNaN(val)) {
-          await callTelegram('sendMessage', {
-            chat_id: chatId,
-            text: "❌ Enter valid number"
-          })
-          return NextResponse.json({ ok: true })
-        }
-
-        await db.clear(sessionKey)
-
-        await callTelegram('sendMessage', {
-          chat_id: chatId,
-          text: `✅ Reading saved: ${val}`
-        })
-
-        await showMenu(chatId, {})
+    // FLOW
+    if (session.step === 'READ_VALUE') {
+      const val = parseFloat(raw)
+      if (isNaN(val)) {
+        await tg('sendMessage', { chat_id: chatId, text: "❌ Enter valid number" })
         return NextResponse.json({ ok: true })
       }
 
-      if (session.step === 'PAY_AMOUNT') {
-        const amt = parseFloat(raw)
-
-        if (isNaN(amt)) {
-          await callTelegram('sendMessage', {
-            chat_id: chatId,
-            text: "❌ Enter valid amount"
-          })
-          return NextResponse.json({ ok: true })
-        }
-
-        await db.clear(sessionKey)
-
-        await callTelegram('sendMessage', {
-          chat_id: chatId,
-          text: `✅ Payment recorded ₹${amt}`
-        })
-
-        await showMenu(chatId, {})
-        return NextResponse.json({ ok: true })
-      }
+      await db.clear(key)
+      await tg('sendMessage', { chat_id: chatId, text: `✅ Reading saved: ${val}` })
+      await menu(chatId, {})
+      return NextResponse.json({ ok: true })
     }
 
-    await callTelegram('sendMessage', {
-      chat_id: chatId,
-      text: "Send /start"
-    })
+    if (session.step === 'PAY_AMOUNT') {
+      const amt = parseFloat(raw)
+      if (isNaN(amt)) {
+        await tg('sendMessage', { chat_id: chatId, text: "❌ Enter valid amount" })
+        return NextResponse.json({ ok: true })
+      }
 
+      await db.clear(key)
+      await tg('sendMessage', { chat_id: chatId, text: `✅ Payment ₹${amt}` })
+      await menu(chatId, {})
+      return NextResponse.json({ ok: true })
+    }
+
+    await tg('sendMessage', { chat_id: chatId, text: "Send /start" })
     return NextResponse.json({ ok: true })
 
   } catch (err) {
@@ -276,5 +230,5 @@ export async function POST(req) {
 }
 
 export async function GET() {
-  return new Response("Telegram Premium UI Running 🚀")
+  return new Response("Telegram Premium Bot Running 🚀")
 }
