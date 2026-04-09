@@ -130,37 +130,40 @@ export async function POST(req) {
     if (listId === 'path_reading') {
       await db.updateSession(from, { step: 'READ_UNIT' })
       await ui.text(from, "📝 *Submit Reading*\nWhich unit? (e.g. G01)")
-      return NextResponse.json({ ok: true })
+      return ok()
     }
     if (listId === 'path_payment') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) return await ui.text(from, "🏠 No active residents found.")
+      if (!tenants?.length) { await ui.text(from, "🏠 No active residents found."); return ok() }
       await db.updateSession(from, { step: 'PAY_TENANT' })
-      return await ui.list(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "RESIDENTS", rows: tenants.map(t => ({ id: `t_${t.id}`, title: `${t.unit?.unit_number || '?'} - ${t.name}`.substring(0, 24) })) }])
+      await ui.list(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "RESIDENTS", rows: tenants.map(t => ({ id: `t_${t.id}`, title: `${t.unit?.unit_number || '?'} - ${t.name}`.substring(0, 24) })) }])
+      return ok()
     }
     if (listId === 'path_lookup') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
       await db.updateSession(from, { step: 'LOOKUP_TENANT' })
-      return await ui.list(from, "🔍 Get Unit Bill", "Choose resident:", "Select", [{ title: "RESIDENTS", rows: (tenants || []).map(t => ({ id: `t_${t.id}`, title: `${t.unit?.unit_number || '?'} - ${t.name}`.substring(0, 24) })) }])
+      await ui.list(from, "🔍 Get Unit Bill", "Choose resident:", "Select", [{ title: "RESIDENTS", rows: (tenants || []).map(t => ({ id: `t_${t.id}`, title: `${t.unit?.unit_number || '?'} - ${t.name}`.substring(0, 24) })) }])
+      return ok()
     }
     if (listId === 'path_unpaid') {
       const { data: bills } = await supabase.from('utility_bills').select(`balance_due, billing_month, tenant_id`).eq('user_id', profile.id).gt('balance_due', 0).order('billing_month', { ascending: false })
-      if (!bills?.length) return await ui.buttons(from, "✅ All bills are fully paid!", ["Main Menu"])
+      if (!bills?.length) { await ui.buttons(from, "✅ All bills are fully paid!", ["Main Menu"]); return ok() }
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
       const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || '?']))
       let r = `🚩 *Outstanding Bills*\n\n`; const grouped = bills.reduce((acc, b) => { (acc[b.billing_month] ||= []).push(b); return acc }, {})
       for (const [month, mBills] of Object.entries(grouped)) { r += `📅 *${month}*\n`; mBills.forEach(b => { r += `▫️ ${uMap[b.tenant_id]} (${tMap[b.tenant_id]}): ₹${db.fmt(b.balance_due)}\n` }); r += `\n` }
-      return await ui.buttons(from, r, ["Main Menu"])
+      await ui.buttons(from, r, ["Main Menu"]); return ok()
     }
     if (listId === 'path_summary') {
       const { data: props } = await supabase.from('properties').select('name, units').eq('user_id', profile.id)
       let r = `🏢 *Property Summary*\n\n` + (props?.length ? props.map(p => `• ${p.name}: ${p.units} units`).join('\n') : "No properties found.")
-      return await ui.buttons(from, r, ["Main Menu"])
+      await ui.buttons(from, r, ["Main Menu"]); return ok()
     }
     if (listId === 'path_monthly') {
       const rows = []; for (let i = 0; i < 6; i++) { const d = new Date(); d.setMonth(d.getMonth() - i); rows.push({ id: `rep_${d.toISOString().slice(0, 7)}`, title: d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) }) }
       await db.updateSession(from, { step: 'REP_MONTH' })
-      return await ui.list(from, "📅 Monthly Summary", "Select month:", "Select", [{ title: "MONTHS", rows }])
+      await ui.list(from, "📅 Monthly Summary", "Select month:", "Select", [{ title: "MONTHS", rows }])
+      return ok()
     }
 
     // 4. ROUTER: SESSION STEPS
