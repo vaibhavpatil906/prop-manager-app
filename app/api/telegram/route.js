@@ -29,7 +29,7 @@ async function callTelegram(method, data) {
   }
 }
 
-// --- UI HELPERS ---
+// --- UI ---
 const ui = {
   text: (chatId, text) =>
     callTelegram('sendMessage', {
@@ -51,7 +51,7 @@ const ui = {
   requestContact: (chatId) =>
     callTelegram('sendMessage', {
       chat_id: chatId,
-      text: "🔒 <b>Login Required</b>\nTap below to continue",
+      text: "🔒 <b>Login Required</b>\n\nTap below to share your phone number.",
       parse_mode: 'HTML',
       reply_markup: {
         keyboard: [[{ text: "📲 Share Phone Number", request_contact: true }]],
@@ -69,7 +69,7 @@ const ui = {
     })
 }
 
-// --- SESSION ---
+// --- DB ---
 const db = {
   getSession: async (key) => {
     const { data } = await supabase
@@ -77,7 +77,6 @@ const db = {
       .select('*')
       .eq('phone', key)
       .maybeSingle()
-
     return data
   },
 
@@ -98,7 +97,7 @@ const db = {
 export async function POST(req) {
   try {
     const body = await req.json()
-    console.log("📩 Incoming:", body)
+    console.log("📩 Incoming:", JSON.stringify(body))
 
     const message = body.message
     const callback = body.callback_query
@@ -109,21 +108,20 @@ export async function POST(req) {
 
     if (!chatId) return NextResponse.json({ ok: true })
 
-    // Stop Telegram loading spinner
+    // Remove loading spinner for buttons
     if (callback) {
       await callTelegram('answerCallbackQuery', {
         callback_query_id: callback.id
       })
     }
 
-    // --- AUTH CHECK ---
+    // --- AUTH ---
     let { data: profile } = await supabase
       .from('profiles')
       .select('*')
       .eq('telegram_chat_id', chatId)
       .maybeSingle()
 
-    // --- HANDLE NEW USER ---
     if (!profile) {
       if (message?.contact) {
         const phone = message.contact.phone_number.replace(/\D/g, '')
@@ -157,17 +155,26 @@ export async function POST(req) {
     const input = raw.toLowerCase()
     const sessionKey = `tg_${chatId}`
 
-    // --- MAIN MENU ---
-    if (['hi', 'menu', 'start', 'reset'].includes(input)) {
+    // --- HANDLE COMMANDS (/start, /menu etc) ---
+    if (input.startsWith('/')) {
       await db.clearSession(sessionKey)
 
-      await ui.buttons(chatId, "👋 <b>PropManager</b>\nChoose option:", [
-        "Submit Reading",
-        "Record Payment",
-        "Unpaid Bills"
-      ])
+      return await ui.buttons(
+        chatId,
+        "👋 <b>Welcome to PropManager</b>\n\nChoose an option:",
+        ["Submit Reading", "Record Payment", "Unpaid Bills"]
+      )
+    }
 
-      return NextResponse.json({ ok: true })
+    // --- NORMAL MENU ---
+    if (['hi', 'menu', 'reset'].includes(input)) {
+      await db.clearSession(sessionKey)
+
+      return await ui.buttons(
+        chatId,
+        "👋 <b>PropManager</b>\nChoose option:",
+        ["Submit Reading", "Record Payment", "Unpaid Bills"]
+      )
     }
 
     const session = await db.getSession(sessionKey)
@@ -176,12 +183,12 @@ export async function POST(req) {
     if (!session) {
       if (input === "submit reading") {
         await db.updateSession(sessionKey, { step: 'READ_UNIT' })
-        return await ui.text(chatId, "Enter unit (example: G01)")
+        return await ui.text(chatId, "📝 Enter unit (e.g. G01)")
       }
 
       if (input === "record payment") {
         await db.updateSession(sessionKey, { step: 'PAY_AMOUNT' })
-        return await ui.text(chatId, "Enter amount")
+        return await ui.text(chatId, "💰 Enter amount")
       }
 
       if (input === "unpaid bills") {
@@ -194,7 +201,9 @@ export async function POST(req) {
       if (session.step === 'PAY_AMOUNT') {
         const amt = parseFloat(raw.replace(/[^\d.]/g, ''))
 
-        if (!amt) return await ui.text(chatId, "❌ Invalid amount")
+        if (!amt || amt <= 0) {
+          return await ui.text(chatId, "❌ Enter valid amount")
+        }
 
         await db.clearSession(sessionKey)
 
@@ -203,11 +212,12 @@ export async function POST(req) {
 
       if (session.step === 'READ_UNIT') {
         await db.clearSession(sessionKey)
+
         return await ui.text(chatId, "✅ Reading saved")
       }
     }
 
-    return await ui.text(chatId, "Send 'menu' to start")
+    return await ui.text(chatId, "❓ Send /start or menu")
 
   } catch (err) {
     console.error("🔥 ERROR:", err)
