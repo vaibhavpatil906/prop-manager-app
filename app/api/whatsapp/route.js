@@ -19,11 +19,12 @@ async function callWhatsApp(to, messageData) {
   const phoneId = process.env.WHATSAPP_PHONE_ID
   if (!token || !phoneId) return null
   try {
-    return await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
     })
+    return res
   } catch (err) { return null }
 }
 
@@ -63,7 +64,6 @@ const db = {
   fmt: (val) => parseFloat(val || 0).toLocaleString('en-IN')
 }
 
-// --- REPORT GENERATORS ---
 async function generateMonthlyReport(from, profileId, targetMonth) {
   const { data: bills } = await supabase.from('utility_bills').select('*').eq('user_id', profileId).eq('billing_month', targetMonth)
   if (!bills?.length) return await ui.buttons(from, `📭 No data for ${targetMonth}`, ["Main Menu"])
@@ -118,8 +118,8 @@ export async function POST(req) {
 
     if (authErr || !profile) {
       console.error(`[AUTH] Failed for ${cleanPhone}:`, authErr?.message)
-      await ui.text(from, `⚠️ Unauthorized: ${from}. Please add this number to Settings.`)
-      return ok()
+      await ui.text(from, `⚠️ Unauthorized: ${from}. Please add this number to Settings in the web app.`)
+      return NextResponse.json({ ok: true })
     }
     console.log(`[AUTH] Success: ${profile.business_name} (ID: ${profile.id})`)
 
@@ -138,54 +138,55 @@ export async function POST(req) {
     if (listId === 'path_reading') {
       await db.updateSession(from, { step: 'READ_UNIT' })
       await ui.text(from, "📝 *Submit Reading*\nWhich unit? (e.g. G01)")
-      return ok()
+      return NextResponse.json({ ok: true })
     }
     if (listId === 'path_payment') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
-      if (!tenants?.length) { await ui.text(from, "🏠 No active residents found."); return ok() }
+      if (!tenants?.length) { await ui.text(from, "🏠 No active residents found."); return NextResponse.json({ ok: true }) }
       await db.updateSession(from, { step: 'PAY_TENANT' })
       await ui.list(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "RESIDENTS", rows: tenants.map(t => ({ id: `t_${t.id}`, title: `${t.unit?.unit_number || '?'} - ${t.name}`.substring(0, 24) })) }])
-      return ok()
+      return NextResponse.json({ ok: true })
     }
     if (listId === 'path_lookup') {
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
       await db.updateSession(from, { step: 'LOOKUP_TENANT' })
       await ui.list(from, "🔍 Get Unit Bill", "Choose resident:", "Select", [{ title: "RESIDENTS", rows: (tenants || []).map(t => ({ id: `t_${t.id}`, title: `${t.unit?.unit_number || '?'} - ${t.name}`.substring(0, 24) })) }])
-      return ok()
+      return NextResponse.json({ ok: true })
     }
     if (listId === 'path_unpaid') {
       const { data: bills } = await supabase.from('utility_bills').select(`balance_due, billing_month, tenant_id`).eq('user_id', profile.id).gt('balance_due', 0).order('billing_month', { ascending: false })
-      if (!bills?.length) { await ui.buttons(from, "✅ All bills are fully paid!", ["Main Menu"]); return ok() }
+      if (!bills?.length) { await ui.buttons(from, "✅ All bills are fully paid!", ["Main Menu"]); return NextResponse.json({ ok: true }) }
       const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
       const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || '?']))
       let r = `🚩 *Outstanding Bills*\n\n`; const grouped = bills.reduce((acc, b) => { (acc[b.billing_month] ||= []).push(b); return acc }, {})
       for (const [month, mBills] of Object.entries(grouped)) { r += `📅 *${month}*\n`; mBills.forEach(b => { r += `▫️ ${uMap[b.tenant_id]} (${tMap[b.tenant_id]}): ₹${db.fmt(b.balance_due)}\n` }); r += `\n` }
-      await ui.buttons(from, r, ["Main Menu"]); return ok()
+      await ui.buttons(from, r, ["Main Menu"]); return NextResponse.json({ ok: true })
     }
     if (listId === 'path_summary') {
       const { data: props } = await supabase.from('properties').select('name, units').eq('user_id', profile.id)
       let r = `🏢 *Property Summary*\n\n` + (props?.length ? props.map(p => `• ${p.name}: ${p.units} units`).join('\n') : "No properties found.")
-      await ui.buttons(from, r, ["Main Menu"]); return ok()
+      await ui.buttons(from, r, ["Main Menu"]); return NextResponse.json({ ok: true })
     }
     if (listId === 'path_monthly') {
       const rows = []; for (let i = 0; i < 6; i++) { const d = new Date(); d.setMonth(d.getMonth() - i); rows.push({ id: `rep_${d.toISOString().slice(0, 7)}`, title: d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) }) }
       await db.updateSession(from, { step: 'REP_MONTH' })
       await ui.list(from, "📅 Monthly Summary", "Select month:", "Select", [{ title: "MONTHS", rows }])
-      return ok()
+      return NextResponse.json({ ok: true })
     }
 
-    // 4. ROUTER: SESSION STEPS
     const session = await db.getSession(from)
+
+    // 4. ROUTER: SESSION STEPS
     if (session) {
       if (session.step === 'PAY_TENANT') {
         const tId = listId?.replace('t_', '')
         const { data: bills } = await supabase.from('utility_bills').select('id, billing_month, balance_due').eq('tenant_id', tId).gt('balance_due', 0).order('billing_month', { ascending: false })
         if (!bills?.length) { await db.clearSession(from); return await ui.buttons(from, "✅ No pending bills.", ["Main Menu"]) }
         await db.updateSession(from, { step: 'PAY_BILL', tenant_id: tId })
-        return await ui.list(from, `💰 Select Month`, "Choose month:", "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `b_${b.id}`, title: `${b.billing_month} (Due: ₹${db.fmt(b.balance_due)})` })) }])
+        return await ui.list(from, `💰 Select Bill`, "Choose month:", "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${db.fmt(b.balance_due)})` })) }])
       }
       if (session.step === 'PAY_BILL') {
-        const bId = listId?.replace('b_', ''); const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', bId).single()
+        const bId = listId?.replace('bill_', ''); const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', bId).single()
         await db.updateSession(from, { step: 'PAY_AMOUNT', bill_id: bId, bill_month: bill.billing_month })
         return await ui.text(from, `💸 Pending for *${bill.billing_month}*: ₹${db.fmt(bill.balance_due)}\n\nHow much received?`)
       }
@@ -217,7 +218,6 @@ export async function POST(req) {
         return await ui.buttons(from, `📟 Current: ${curr}`, ["Skip (140)", "Enter Custom"])
       }
       if (session.step === 'READ_WATER') {
-        if (input === 'enter custom') return await ui.text(from, "Type water amount:")
         const water = input.startsWith('skip') ? CONFIG.WATER_DEFAULT : parseFloat(rawText.replace(/[^\d.]/g, ''))
         const elec = Math.max((session.curr_reading - session.prev_reading) * CONFIG.ELEC_RATE, CONFIG.ELEC_MIN)
         const total = parseFloat(session.rent) + elec + water
@@ -232,14 +232,9 @@ export async function POST(req) {
         bills.forEach(b => {
           const u = Math.max(0, b.curr_reading - b.prev_reading)
           const e = Math.max(u * (b.rate_per_unit || 10), 150)
-          r += `📅 *${b.billing_month}*\n` +
-               `▫️ Rent: ₹${db.fmt(b.fixed_rent)}\n` +
-               `▫️ Elec: ₹${db.fmt(e)} (${u} units)\n` +
-               `▫️ Water: ₹${db.fmt(b.water_bill)}\n` +
-               `💰 *TOTAL: ₹${db.fmt(b.total_amount)}*\n` +
-               `🚩 *DUE: ₹${db.fmt(b.balance_due)}*\n_________________________\n\n`
+          r += `📅 *${b.billing_month}*\n▫️ Rent: ₹${db.fmt(b.fixed_rent)}\n▫️ Elec: ₹${db.fmt(e)} (${u} units)\n▫️ Water: ₹${db.fmt(b.water_bill)}\n💰 *TOTAL: ₹${db.fmt(b.total_amount)}*\n🚩 *DUE: ₹${db.fmt(b.balance_due)}*\n_________________________\n\n`
         })
-        await db.clearSession(from); await ui.buttons(from, r, ["Main Menu"]); return ok()
+        await db.clearSession(from); await ui.buttons(from, r, ["Main Menu"]); return NextResponse.json({ ok: true })
       }
       if (session.step === 'REP_MONTH') {
         const m = listId?.replace('rep_', '')
@@ -249,7 +244,6 @@ export async function POST(req) {
       }
     }
 
-    // 5. FALLBACK
     return await ui.text(from, "❓ Send *Hi* or *Menu* to start.")
 
   } catch (err) { return NextResponse.json({ ok: true }) }
