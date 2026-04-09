@@ -1,38 +1,42 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// --- INIT ---
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-const CONFIG = {
-  WATER_DEFAULT: 140,
-  ELEC_RATE: 10,
-  ELEC_MIN: 150
-}
-
 // --- TELEGRAM API ---
 async function callTelegram(method, data) {
-  const token = process.env.TELEGRAM_BOT_TOKEN
-  if (!token) return console.error('[TG] Missing token')
-
   try {
+    const token = process.env.TELEGRAM_BOT_TOKEN
+
+    if (!token) {
+      console.error("❌ Missing TELEGRAM_BOT_TOKEN")
+      return
+    }
+
     const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     })
+
     return await res.json()
   } catch (err) {
-    console.error('[TG ERROR]', err)
+    console.error("❌ Telegram API Error:", err)
   }
 }
 
-// --- UI ---
+// --- UI HELPERS ---
 const ui = {
   text: (chatId, text) =>
-    callTelegram('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' }),
+    callTelegram('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML'
+    }),
 
   buttons: (chatId, text, buttons) =>
     callTelegram('sendMessage', {
@@ -47,7 +51,7 @@ const ui = {
   requestContact: (chatId) =>
     callTelegram('sendMessage', {
       chat_id: chatId,
-      text: "🔒 <b>Login Required</b>\n\nTap below to share phone number.",
+      text: "🔒 <b>Login Required</b>\nTap below to continue",
       parse_mode: 'HTML',
       reply_markup: {
         keyboard: [[{ text: "📲 Share Phone Number", request_contact: true }]],
@@ -65,25 +69,36 @@ const ui = {
     })
 }
 
-// --- DB ---
+// --- SESSION ---
 const db = {
   getSession: async (key) => {
-    const { data } = await supabase.from('bot_sessions').select('*').eq('phone', key).maybeSingle()
+    const { data } = await supabase
+      .from('bot_sessions')
+      .select('*')
+      .eq('phone', key)
+      .maybeSingle()
+
     return data
   },
+
   updateSession: (key, data) =>
-    supabase.from('bot_sessions').upsert({ phone: key, ...data }),
+    supabase.from('bot_sessions').upsert({
+      phone: key,
+      ...data,
+      updated_at: new Date()
+    }),
 
   clearSession: (key) =>
     supabase.from('bot_sessions').delete().eq('phone', key),
 
-  fmt: (v) => parseFloat(v || 0).toLocaleString('en-IN')
+  fmt: (val) => parseFloat(val || 0).toLocaleString('en-IN')
 }
 
-// --- HANDLER ---
+// --- MAIN HANDLER ---
 export async function POST(req) {
   try {
     const body = await req.json()
+    console.log("📩 Incoming:", body)
 
     const message = body.message
     const callback = body.callback_query
@@ -94,19 +109,21 @@ export async function POST(req) {
 
     if (!chatId) return NextResponse.json({ ok: true })
 
+    // Stop Telegram loading spinner
     if (callback) {
       await callTelegram('answerCallbackQuery', {
         callback_query_id: callback.id
       })
     }
 
-    // --- AUTH ---
+    // --- AUTH CHECK ---
     let { data: profile } = await supabase
       .from('profiles')
       .select('*')
       .eq('telegram_chat_id', chatId)
       .maybeSingle()
 
+    // --- HANDLE NEW USER ---
     if (!profile) {
       if (message?.contact) {
         const phone = message.contact.phone_number.replace(/\D/g, '')
@@ -140,11 +157,11 @@ export async function POST(req) {
     const input = raw.toLowerCase()
     const sessionKey = `tg_${chatId}`
 
-    // --- MENU ---
-    if (['hi','menu','start','reset'].includes(input)) {
+    // --- MAIN MENU ---
+    if (['hi', 'menu', 'start', 'reset'].includes(input)) {
       await db.clearSession(sessionKey)
 
-      await ui.buttons(chatId, "👋 <b>PropManager</b>\nChoose:", [
+      await ui.buttons(chatId, "👋 <b>PropManager</b>\nChoose option:", [
         "Submit Reading",
         "Record Payment",
         "Unpaid Bills"
@@ -159,22 +176,28 @@ export async function POST(req) {
     if (!session) {
       if (input === "submit reading") {
         await db.updateSession(sessionKey, { step: 'READ_UNIT' })
-        return await ui.text(chatId, "Enter unit (G01)")
+        return await ui.text(chatId, "Enter unit (example: G01)")
       }
 
       if (input === "record payment") {
         await db.updateSession(sessionKey, { step: 'PAY_AMOUNT' })
         return await ui.text(chatId, "Enter amount")
       }
+
+      if (input === "unpaid bills") {
+        return await ui.text(chatId, "📊 Feature coming soon")
+      }
     }
 
     // --- SESSION FLOW ---
     if (session) {
       if (session.step === 'PAY_AMOUNT') {
-        const amt = parseFloat(raw)
-        if (!amt) return await ui.text(chatId, "Invalid amount")
+        const amt = parseFloat(raw.replace(/[^\d.]/g, ''))
+
+        if (!amt) return await ui.text(chatId, "❌ Invalid amount")
 
         await db.clearSession(sessionKey)
+
         return await ui.text(chatId, `✅ Payment recorded ₹${db.fmt(amt)}`)
       }
 
@@ -184,14 +207,15 @@ export async function POST(req) {
       }
     }
 
-    return await ui.text(chatId, "Send 'menu'")
+    return await ui.text(chatId, "Send 'menu' to start")
 
   } catch (err) {
-    console.error(err)
+    console.error("🔥 ERROR:", err)
     return NextResponse.json({ ok: true })
   }
 }
 
+// --- HEALTH CHECK ---
 export async function GET() {
-  return new Response('Bot Running')
+  return new Response("Telegram Bot Running ✅")
 }
