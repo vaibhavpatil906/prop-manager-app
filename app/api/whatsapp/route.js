@@ -108,12 +108,20 @@ export async function POST(req) {
     const from = message.from
     const cleanPhone = from.replace(/\D/g, '')
 
-    // 1. Auth
-    const { data: profile } = await supabase.from('profiles').select('*').or(`contact_number.ilike.%${cleanPhone}%,additional_number.ilike.%${cleanPhone}%`).single()
-    if (!profile) {
-      await ui.text(from, `⚠️ Unauthorized: ${from}`)
-      return NextResponse.json({ ok: true })
+    // 1. Auth check (Flexible)
+    console.log(`[AUTH] Attempting login for: ${cleanPhone}`)
+    const { data: profile, error: authErr } = await supabase
+      .from('profiles')
+      .select('id, business_name, contact_number, additional_number')
+      .or(`contact_number.ilike.%${cleanPhone}%,additional_number.ilike.%${cleanPhone}%`)
+      .single()
+
+    if (authErr || !profile) {
+      console.error(`[AUTH] Failed for ${cleanPhone}:`, authErr?.message)
+      await ui.text(from, `⚠️ Unauthorized: ${from}. Please add this number to Settings.`)
+      return ok()
     }
+    console.log(`[AUTH] Success: ${profile.business_name} (ID: ${profile.id})`)
 
     const rawText = (message.text?.body || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "").trim()
     const listId = message.interactive?.list_reply?.id
