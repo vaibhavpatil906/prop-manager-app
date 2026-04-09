@@ -76,7 +76,13 @@ export async function POST(req) {
   try {
     const rawBody = await req.text()
     const signature = req.headers.get('x-hub-signature-256')
-    if (!verifyWebhookSignature(rawBody, signature)) return new Response('Unauthorized', { status: 401 })
+    console.log('[BOT] Raw Body:', rawBody.substring(0, 200))
+    console.log('[BOT] Signature:', signature)
+
+    if (!verifyWebhookSignature(rawBody, signature)) {
+      console.warn('[BOT] Signature Mismatch')
+      return new Response('Unauthorized', { status: 401 })
+    }
 
     const body = JSON.parse(rawBody)
     const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
