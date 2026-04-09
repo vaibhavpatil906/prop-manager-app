@@ -562,20 +562,31 @@ export async function POST(req) {
     }
 
     if (listId === 'path_summary' || input === 'property summary') {
-      const [{ data: props }, { data: units }] = await Promise.all([
-        supabase.from('properties').select('name').eq('user_id', profile.id),
-        supabase.from('units').select('status, rent').eq('user_id', profile.id)
-      ])
-      const occupied = units?.filter(u => u.status === 'Occupied') || []
-      const vacant   = units?.filter(u => u.status === 'Vacant') || []
+      // Fetch properties with their units nested — avoids user_id cross-join inflation
+      const { data: props } = await supabase
+        .from('properties')
+        .select('id, name, units(id, status, rent)')
+        .eq('user_id', profile.id)
+
+      const allUnits    = (props || []).flatMap(p => p.units || [])
+      const occupied    = allUnits.filter(u => u.status === 'Occupied')
+      const vacant      = allUnits.filter(u => u.status === 'Vacant')
       const monthlyRent = occupied.reduce((s, u) => s + parseFloat(u.rent || 0), 0)
+
       let r = `🏢 *Property Summary*\n\n`
-      r += `🏠 Properties: ${props?.length || 0}\n`
-      r += `🔑 Total Units: ${units?.length || 0}\n`
+      if (props?.length) {
+        props.forEach(p => {
+          const pOcc = (p.units || []).filter(u => u.status === 'Occupied').length
+          const pTot = (p.units || []).length
+          r += `🏠 ${p.name}: ${pOcc}/${pTot} occupied\n`
+        })
+        r += `\n`
+      }
+      r += `🔑 Total Units: ${allUnits.length}\n`
       r += `✅ Occupied: ${occupied.length}\n`
       r += `🔓 Vacant: ${vacant.length}\n`
       r += `_________________________\n`
-      r += `💰 Monthly Rent Income: ₹${fmt(monthlyRent)}`
+      r += `💰 Monthly Income: ₹${fmt(monthlyRent)}`
       return await sendButtons(from, r, ["Main Menu"])
     }
 
