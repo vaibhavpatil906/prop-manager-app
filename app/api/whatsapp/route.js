@@ -63,6 +63,24 @@ const db = {
   fmt: (val) => parseFloat(val || 0).toLocaleString('en-IN')
 }
 
+// --- REPORT GENERATORS ---
+async function generateMonthlyReport(from, profileId, targetMonth) {
+  const { data: bills } = await supabase.from('utility_bills').select('*').eq('user_id', profileId).eq('billing_month', targetMonth)
+  if (!bills?.length) return await ui.buttons(from, `📭 No data for ${targetMonth}`, ["Main Menu"])
+  
+  const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
+  const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || '?']))
+  
+  let tb = 0; let tc = 0; let r = `📊 *Report: ${targetMonth}*\n\n`
+  bills.forEach(b => { 
+    const bld = parseFloat(b.total_amount); const due = parseFloat(b.balance_due); const clc = bld - due
+    r += `🏠 *${uMap[b.tenant_id]}* (${tMap[b.tenant_id]})\n   Billed: ₹${db.fmt(bld)} | Col: ₹${db.fmt(clc)}\n_________________________\n\n`
+    tb += bld; tc += clc 
+  })
+  const footer = `⭐ *BILLED:* ₹${db.fmt(tb)}\n💰 *COLLECTED:* ₹${db.fmt(tc)}\n🚩 *PENDING:* ₹${db.fmt(tb-tc)}`
+  await ui.buttons(from, r + footer, ["Main Menu"])
+}
+
 async function sendMainMenu(to) {
   await ui.list(to, `👋 PropManager Home`, "Select an action:", "Menu", [
     { title: "⚡ RECORD", rows: [
@@ -102,14 +120,13 @@ export async function POST(req) {
     const input = rawText.toLowerCase()
 
     // 2. Global Reset
-    if (['hi', 'hello', 'menu', 'reset', 'start', 'cancel'].includes(input) || listId === 'nav_main') {
+    if (['hi', 'hello', 'menu', 'reset', 'start', 'hey', 'cancel'].includes(input) || listId === 'nav_main') {
       await db.clearSession(from)
       await sendMainMenu(from)
       return NextResponse.json({ ok: true })
     }
 
-    // 3. ROUTER: INITIAL TRIGGERS (HIGH PRIORITY)
-    // These now run even if a session exists, allowing you to switch tasks easily.
+    // 3. ROUTER: INITIAL TRIGGERS
     if (listId === 'path_reading') {
       await db.updateSession(from, { step: 'READ_UNIT' })
       await ui.text(from, "📝 *Submit Reading*\nWhich unit? (e.g. G01)")
@@ -139,6 +156,11 @@ export async function POST(req) {
       const { data: props } = await supabase.from('properties').select('name, units').eq('user_id', profile.id)
       let r = `🏢 *Property Summary*\n\n` + (props?.length ? props.map(p => `• ${p.name}: ${p.units} units`).join('\n') : "No properties found.")
       return await ui.buttons(from, r, ["Main Menu"])
+    }
+    if (listId === 'path_monthly') {
+      const rows = []; for (let i = 0; i < 6; i++) { const d = new Date(); d.setMonth(d.getMonth() - i); rows.push({ id: `rep_${d.toISOString().slice(0, 7)}`, title: d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) }) }
+      await db.updateSession(from, { step: 'REP_MONTH' })
+      return await ui.list(from, "📅 Monthly Summary", "Select month:", "Select", [{ title: "MONTHS", rows }])
     }
 
     // 4. ROUTER: SESSION STEPS
@@ -197,6 +219,12 @@ export async function POST(req) {
         if (!bills?.length) { await db.clearSession(from); return await ui.buttons(from, "📭 No history found.", ["Main Menu"]) }
         let r = `🧾 *History*\n\n`; bills.forEach(b => { r += `📅 *${b.billing_month}*\n💰 Total: ₹${db.fmt(b.total_amount)}\n🚩 Due: ₹${db.fmt(b.balance_due)}\n\n` })
         await db.clearSession(from); return await ui.buttons(from, r, ["Main Menu"])
+      }
+      if (session.step === 'REP_MONTH') {
+        const m = listId?.replace('rep_', '')
+        await db.clearSession(from)
+        await generateMonthlyReport(from, profile.id, m)
+        return NextResponse.json({ ok: true })
       }
     }
 
