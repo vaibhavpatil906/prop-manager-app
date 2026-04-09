@@ -217,7 +217,17 @@ export async function POST(req) {
       if (session.step === 'LOOKUP_TENANT') {
         const tId = listId?.replace('t_', ''); const { data: bills } = await supabase.from('utility_bills').select('*').eq('tenant_id', tId).order('billing_month', { ascending: false }).limit(3)
         if (!bills?.length) { await db.clearSession(from); return await ui.buttons(from, "📭 No history found.", ["Main Menu"]) }
-        let r = `🧾 *History*\n\n`; bills.forEach(b => { r += `📅 *${b.billing_month}*\n💰 Total: ₹${db.fmt(b.total_amount)}\n🚩 Due: ₹${db.fmt(b.balance_due)}\n\n` })
+        let r = `🧾 *Financial History*\n\n`
+        bills.forEach(b => {
+          const u = Math.max(0, b.curr_reading - b.prev_reading)
+          const e = Math.max(u * (b.rate_per_unit || 10), 150)
+          r += `📅 *${b.billing_month}*\n` +
+               `▫️ Rent: ₹${db.fmt(b.fixed_rent)}\n` +
+               `▫️ Elec: ₹${db.fmt(e)} (${u} units)\n` +
+               `▫️ Water: ₹${db.fmt(b.water_bill)}\n` +
+               `💰 *TOTAL: ₹${db.fmt(b.total_amount)}*\n` +
+               `🚩 *DUE: ₹${db.fmt(b.balance_due)}*\n_________________________\n\n`
+        })
         await db.clearSession(from); await ui.buttons(from, r, ["Main Menu"]); return ok()
       }
       if (session.step === 'REP_MONTH') {
