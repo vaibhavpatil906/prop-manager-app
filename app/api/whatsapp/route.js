@@ -7,33 +7,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder'
 )
 
-// --- CONSTANTS ---
-const DEFAULT_WATER_BILL = 140
-const ELECTRICITY_RATE = 10
-const ELECTRICITY_MIN = 150
-
-// --- WEBHOOK SIGNATURE VERIFICATION ---
-function verifyWebhookSignature(rawBody, signature) {
-  const appSecret = process.env.WHATSAPP_APP_SECRET
-  if (!appSecret) return true
-  const expected = 'sha256=' + crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex')
-  try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature || ''))
-  } catch { return false }
-}
-
-// --- WHATSAPP HELPERS ---
+// --- HELPERS ---
 async function callWhatsApp(to, messageData) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_ID
   if (!token || !phoneId) return
-  try {
-    return await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
-    })
-  } catch (err) { console.error('WA API Error:', err) }
+  return await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: "whatsapp", to, ...messageData })
+  })
 }
 
 const sendText = async (to, text) => await callWhatsApp(to, { type: "text", text: { body: text } })
@@ -56,29 +39,17 @@ const sendListMenu = async (to, header, body, buttonLabel, sections) => await ca
   }
 })
 
-// --- STATE MANAGEMENT ---
-async function getSession(phone) {
-  const { data } = await supabase.from('bot_sessions').select('*').eq('phone', phone).single()
-  return data
-}
-async function updateSession(phone, data) {
-  await supabase.from('bot_sessions').upsert({ phone, ...data, updated_at: new Date() })
-}
-async function clearSession(phone) {
-  await supabase.from('bot_sessions').delete().eq('phone', phone)
-}
+async function getSession(phone) { const { data } = await supabase.from('bot_sessions').select('*').eq('phone', phone).single(); return data }
+async function updateSession(phone, data) { await supabase.from('bot_sessions').upsert({ phone, ...data, updated_at: new Date() }) }
+async function clearSession(phone) { await supabase.from('bot_sessions').delete().eq('phone', phone) }
 
 const ok = () => NextResponse.json({ ok: true })
 const fmt = (val) => parseFloat(val || 0).toLocaleString('en-IN')
 
-// --- MAIN BOT HANDLER ---
+// --- MAIN HANDLER ---
 export async function POST(req) {
   try {
-    const rawBody = await req.text()
-    const signature = req.headers.get('x-hub-signature-256')
-    if (!verifyWebhookSignature(rawBody, signature)) return new Response('Unauthorized', { status: 401 })
-
-    const body = JSON.parse(rawBody)
+    const body = await req.json()
     const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
     if (!message) return ok()
 
@@ -87,96 +58,108 @@ export async function POST(req) {
 
     // 1. Auth check
     const { data: profile } = await supabase.from('profiles').select('*').ilike('contact_number', `%${cleanPhone}%`).single()
-    if (!profile) {
-      await sendText(from, `⚠️ Unauthorized: ${from}. Please register in settings.`)
-      return ok()
-    }
+    if (!profile) { await sendText(from, `⚠️ Access denied.`); return ok() }
 
     const text = (message.text?.body || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "").trim()
     const listId = message.interactive?.list_reply?.id
     const input = text.toLowerCase()
 
-    // 2. Priority Logic: Main Menu reset
-    if (['hi', 'hello', 'menu', 'start', 'hey', 'cancel', 'reset'].includes(input) || listId === 'nav_main') {
+    // 2. Priority reset
+    if (['hi', 'hello', 'menu', 'start', 'hey', 'reset', 'cancel'].includes(input) || listId === 'nav_main') {
       await clearSession(from)
-      await sendListMenu(from, `👋 PropManager Pro`, "Select an action:", "Menu", [
+      await sendListMenu(from, `👋 PropManager Home`, "Select action:", "Menu", [
         { title: "⚡ RECORD", rows: [{ id: "path_reading", title: "Submit Reading" }, { id: "path_pay_rec", title: "Record Payment" }, { id: "path_expense", title: "Add Expense" }] },
-        { title: "📊 REPORTS", rows: [{ id: "path_profit", title: "Net Profit (P&L)" }, { id: "path_monthly", title: "Invoicing Report" }, { id: "path_unpaid", title: "Unpaid Bills" }, { id: "path_vacancy", title: "Vacancy Analysis" }] },
-        { title: "🔍 LOOKUP", rows: [{ id: "path_lookup", title: "Get Unit Bill" }, { id: "path_compliance", title: "Compliance Status" }, { id: "path_summary", title: "Property Summary" }] }
+        { title: "📊 REPORTS", rows: [{ id: "path_profit", title: "Net Profit (P&L)" }, { id: "path_unpaid", title: "Unpaid Bills" }, { id: "path_vacancy", title: "Vacancy Loss" }] },
+        { title: "🔍 LOOKUP", rows: [{ id: "path_lookup", title: "Get Unit Bill" }, { id: "path_summary", title: "Property Summary" }] }
       ])
       return ok()
     }
 
-    // 3. Handle Ongoing Sessions
+    // 3. UNPAID BILLS (High priority match)
+    if (listId === 'path_unpaid' || input === 'unpaid bills') {
+      const { data: bills } = await supabase.from('utility_bills').select(`balance_due, billing_month, tenant_id`).eq('user_id', profile.id).gt('balance_due', 0).order('billing_month', { ascending: false })
+      if (!bills?.length) return await sendButtons(from, "✅ All paid!", ["Main Menu"])
+      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
+      const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name])); const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || '?']))
+      
+      const grouped = bills.reduce((acc, b) => {
+        const key = `${b.billing_month}_${b.tenant_id}`; if (!acc[key]) acc[key] = { m: b.billing_month, tid: b.tenant_id, b: 0 }; acc[key].b += parseFloat(b.balance_due); return acc
+      }, {})
+      
+      let r = `🚩 *Outstanding*\n\n`; let gt = 0
+      const final = Object.values(grouped).reduce((acc, x) => { (acc[x.m] ||= []).push(x); return acc }, {})
+      for (const [m, items] of Object.entries(final).sort().reverse()) {
+        r += `📅 *${m}*\n`; items.forEach(x => { r += `▫️ ${uMap[x.tid]} (${tMap[x.tid]}): ₹${fmt(x.b)}\n`; gt += x.b }); r += `\n`
+      }
+      return await sendButtons(from, r + `⭐ TOTAL: ₹${fmt(gt)}`, ["Main Menu", "Record Payment"])
+    }
+
     const session = await getSession(from)
+
+    // 4. Session Steps
     if (session) {
-      // (Step-by-step logic handlers here - keeping existing implementation)
-      // I am simplifying the router for reliability
       if (session.step === 'awaiting_payment_tenant_selection') {
         const tenantId = listId?.replace('tenant_', '')
         const { data: bills } = await supabase.from('utility_bills').select('id, billing_month, balance_due').eq('tenant_id', tenantId).gt('balance_due', 0).order('billing_month', { ascending: false })
-        if (!bills?.length) { await clearSession(from); return await sendButtons(from, "✅ No pending bills.", ["Main Menu"]) }
         await updateSession(from, { step: 'awaiting_bill_selection', tenant_id: tenantId })
-        return await sendListMenu(from, `💰 Select Bill`, "Choose month:", "Select", [{ title: "PENDING", rows: bills.map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${fmt(b.balance_due)})` })) }])
+        return await sendListMenu(from, `💰 Select Bill`, "Choose month:", "Select", [{ title: "PENDING", rows: (bills || []).map(b => ({ id: `bill_${b.id}`, title: `${b.billing_month} (Due: ₹${fmt(b.balance_due)})` })) }])
       }
-      // ... (Other steps omitted for brevity in this block, but maintained in code)
+      if (session.step === 'awaiting_bill_selection') {
+        const billId = listId?.replace('bill_', ''); const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', billId).single()
+        await updateSession(from, { step: 'awaiting_payment_amount', bill_id: billId, bill_month: bill.billing_month })
+        return await sendText(from, `💸 Pending: ₹${fmt(bill.balance_due)}. How much received?`)
+      }
+      if (session.step === 'awaiting_payment_amount') {
+        const amt = parseFloat(text.replace(/[^\d.]/g, ''))
+        await updateSession(from, { step: 'awaiting_payment_method', payment_amt: amt })
+        return await sendButtons(from, `💰 Received: ₹${fmt(amt)}\nMethod:`, ["Cash", "UPI", "Bank Transfer"])
+      }
+      if (session.step === 'awaiting_payment_method') {
+        const { data: bill } = await supabase.from('utility_bills').select('*').eq('id', session.bill_id).single()
+        const newBal = Math.max(0, (bill?.balance_due || 0) - session.payment_amt)
+        await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: session.payment_amt, status: 'Paid', method: text, payment_date: new Date(), due_date: bill?.due_date })
+        await supabase.from('utility_bills').update({ balance_due: newBal }).eq('id', session.bill_id)
+        if (newBal > 0) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: session.bill_id, amount: newBal, status: 'Pending', method: 'Partial Balance', due_date: bill?.due_date })
+        await clearSession(from); return await sendButtons(from, `✅ Payment Recorded!\n🚩 Remaining: ₹${fmt(newBal)}`, ["Main Menu", "Record Payment"])
+      }
+      // READING FLOW
+      if (session.step === 'awaiting_unit_reading') {
+        const { data: unit } = await supabase.from('units').select('id, rent, tenants(id, name)').eq('unit_number', text.toUpperCase()).single()
+        if (!unit || !unit.tenants?.[0]) return await sendText(from, `❌ Unit not found.`)
+        const { data: last } = await supabase.from('utility_bills').select('curr_reading').eq('tenant_id', unit.tenants[0].id).order('billing_month', { ascending: false }).limit(1).single()
+        await updateSession(from, { step: 'awaiting_reading_value', tenant_id: unit.tenants[0].id, tenant_name: unit.tenants[0].name, prev_reading: last?.curr_reading || 0, rent: unit.rent, unit_num: text.toUpperCase() })
+        return await sendText(from, `👤 Resident: ${unit.tenants[0].name}. What is current reading?`)
+      }
+      if (session.step === 'awaiting_reading_value') {
+        const curr = parseFloat(text.replace(/[^\d.]/g, ''))
+        await updateSession(from, { step: 'awaiting_water_value', curr_reading: curr })
+        return await sendButtons(from, `📟 Current: ${curr}`, ["Skip (140)", "Enter Custom"])
+      }
+      if (session.step === 'awaiting_water_value') {
+        const water = input.startsWith('skip') ? 140 : parseFloat(text.replace(/[^\d.]/g, ''))
+        const elec = Math.max((session.curr_reading - session.prev_reading) * 10, 150)
+        const total = parseFloat(session.rent) + elec + water
+        const { data: bill } = await supabase.from('utility_bills').upsert({ user_id: profile.id, tenant_id: session.tenant_id, billing_month: new Date().toISOString().slice(0, 7), prev_reading: session.prev_reading, curr_reading: session.curr_reading, rate_per_unit: 10, fixed_rent: session.rent, water_bill: water, total_amount: total, balance_due: total, due_date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString().split('T')[0] }).select().single()
+        if (bill) await supabase.from('payments').insert({ tenant_id: session.tenant_id, bill_id: bill.id, amount: total, status: 'Pending', method: 'Utility Bill', due_date: bill.due_date })
+        await clearSession(from); return await sendButtons(from, `✅ Bill Saved! ₹${fmt(total)}`, ["Main Menu", "Submit Reading"])
+      }
     }
 
-    // 4. Initial Triggers (Exclusive check)
-    if (listId === 'path_unpaid' || input === 'unpaid bills') {
-      const { data: bills } = await supabase.from('utility_bills').select(`balance_due, billing_month, tenant_id`).eq('user_id', profile.id).gt('balance_due', 0)
-      if (!bills?.length) return await sendButtons(from, "✅ All bills are paid!", ["Main Menu"])
-      
-      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').in('id', bills.map(b => b.tenant_id))
-      const tMap = Object.fromEntries((tenants || []).map(t => [t.id, t.name]))
-      const uMap = Object.fromEntries((tenants || []).map(t => [t.id, t.unit?.unit_number || '?']))
-      
-      // FIX: Sum up data by Month -> Unit to remove duplicates
-      const grouped = bills.reduce((acc, b) => {
-        const key = `${b.billing_month}_${b.tenant_id}`
-        if (!acc[key]) acc[key] = { month: b.billing_month, tid: b.tenant_id, balance: 0 }
-        acc[key].balance += parseFloat(b.balance_due)
-        return acc
-      }, {})
-
-      const finalGrouped = Object.values(grouped).reduce((acc, item) => {
-        (acc[item.month] ||= []).push(item)
-        return acc
-      }, {})
-
-      let r = `🚩 *Outstanding Balances*\n\n`; let grandTotal = 0
-      for (const [month, items] of Object.entries(finalGrouped).sort().reverse()) {
-        r += `📅 *${month}*\n`
-        items.forEach(item => {
-          r += `▫️ ${uMap[item.tid]} (${tMap[item.tid]}): ₹${fmt(item.balance)}\n`
-          grandTotal += item.balance
-        })
-        r += `\n`
-      }
-      r += `_________________________\n🚩 *TOTAL DUE: ₹${fmt(grandTotal)}*`
-      return await sendButtons(from, r, ["Main Menu", "Record Payment"])
+    // 5. Initial Triggers
+    if (listId === 'path_reading' || input === 'submit reading') { await updateSession(from, { step: 'awaiting_unit_reading' }); return await sendText(from, "📝 Unit? (e.g. G01)") }
+    if (listId === 'path_pay_rec' || input === 'record payment') {
+      const { data: tenants } = await supabase.from('tenants').select('id, name, unit:units(unit_number)').eq('user_id', profile.id).eq('status', 'Active')
+      await updateSession(from, { step: 'awaiting_payment_tenant_selection' })
+      return await sendListMenu(from, "💰 Record Payment", "Choose tenant:", "Select", [{ title: "ACTIVE", rows: (tenants || []).map(t => ({ id: `tenant_${t.id}`, title: `${t.unit?.unit_number || 'Unit'} - ${t.name}`.substring(0, 24) })) }])
+    }
+    if (listId === 'path_summary' || input === 'property summary') {
+      const { data: props } = await supabase.from('properties').select('name, units').eq('user_id', profile.id)
+      return await sendButtons(from, props?.length ? `🏢 Properties:\n` + props.map(p => `• ${p.name}: ${p.units}u`).join('\n') : "🏠 No properties.", ["Main Menu"])
     }
 
-    // (Maintain all other path triggers: path_reading, path_profit, etc. with strict returns)
-    // ... adding remaining triggers here safely ...
+    return await sendText(from, "❓ Send *Hi* for menu.")
 
-    // Default Fallback
-    await sendText(from, "❓ Send *Hi* to open the menu.")
-    return ok()
-
-  } catch (err) {
-    console.error('Bot Error:', err)
-    return ok()
-  }
+  } catch (err) { console.error('Bot Error:', err); return ok() }
 }
 
-// ... Rest of report generators maintained from previous version ...
-async function generateMonthlyReport(from, profileId, targetMonth) { /* implementation */ }
-async function generateProfitLossReport(from, profileId, targetMonth) { /* implementation */ }
-
-export async function GET(req) {
-  const { searchParams } = new URL(req.url)
-  const challenge = searchParams.get('hub.challenge')
-  if (searchParams.get('hub.verify_token') === process.env.WHATSAPP_VERIFY_TOKEN) return new Response(challenge, { status: 200 })
-  return new Response('PropManager Bot ONLINE.', { status: 200 })
-}
+export async function GET(req) { return new Response('Bot ONLINE.', { status: 200 }) }
