@@ -6,188 +6,268 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-// --- CONFIG ---
-const CONFIG = {
-  WATER_DEFAULT: 140,
-  ELEC_RATE: 10,
-  ELEC_MIN: 150
-}
-
-// --- TELEGRAM API ---
+// ---------------- TELEGRAM API ----------------
 async function callTelegram(method, data) {
   const token = process.env.TELEGRAM_BOT_TOKEN
-  if (!token) return
 
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    })
-    return await res.json()
-  } catch (err) {
-    console.error("TG ERROR:", err)
-  }
+  return fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(res => res.json())
 }
 
-// --- UI ---
-const ui = {
-  text: (chatId, text) =>
-    callTelegram('sendMessage', { chat_id: chatId, text, parse_mode: 'Markdown' }),
-
-  buttons: (chatId, text, buttons) =>
-    callTelegram('sendMessage', {
+// ---------------- UI ENGINE ----------------
+const tgUI = {
+  send: async (chatId, text, keyboard) => {
+    const res = await callTelegram('sendMessage', {
       chat_id: chatId,
       text,
       parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: buttons.map(b => [{ text: b.title, callback_data: b.id }])
-      }
-    }),
-
-  list: (chatId, header, text, sections) => {
-    let keyboard = []
-    sections.forEach(sec => {
-      keyboard.push([{ text: `--- ${sec.title} ---`, callback_data: 'ignore' }])
-      sec.rows.forEach(r => {
-        keyboard.push([{ text: r.title, callback_data: r.id }])
-      })
+      reply_markup: { inline_keyboard: keyboard }
     })
+    return res?.result?.message_id
+  },
 
-    return callTelegram('sendMessage', {
+  edit: async (chatId, messageId, text, keyboard) => {
+    return callTelegram('editMessageText', {
       chat_id: chatId,
-      text: `*${header}*\n${text}`,
+      message_id: messageId,
+      text,
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: keyboard }
     })
   }
 }
 
-// --- DB ---
+// ---------------- SESSION ----------------
 const db = {
-  getSession: async (key) => {
-    const { data } = await supabase.from('bot_sessions').select('*').eq('phone', key).maybeSingle()
+  get: async (k) => {
+    const { data } = await supabase.from('bot_sessions').select('*').eq('phone', k).maybeSingle()
     return data
   },
-  updateSession: (key, data) =>
-    supabase.from('bot_sessions').upsert({ phone: key, ...data, updated_at: new Date() }),
-
-  clearSession: (key) =>
-    supabase.from('bot_sessions').delete().eq('phone', key),
-
-  fmt: (v) => parseFloat(v || 0).toLocaleString('en-IN')
+  set: (k, d) => supabase.from('bot_sessions').upsert({ phone: k, ...d, updated_at: new Date() }),
+  clear: (k) => supabase.from('bot_sessions').delete().eq('phone', k)
 }
 
-// --- MAIN ---
+// ---------------- SCREEN RENDER ----------------
+async function render(chatId, session, text, keyboard) {
+  if (session?.message_id) {
+    await tgUI.edit(chatId, session.message_id, text, keyboard)
+  } else {
+    const msgId = await tgUI.send(chatId, text, keyboard)
+    await db.set(`tg_${chatId}`, { message_id: msgId })
+  }
+}
+
+// ---------------- SCREENS ----------------
+
+// MAIN MENU
+async function showMenu(chatId, session) {
+  await render(chatId, session,
+`👋 *PropManager Pro*
+
+🏢 Manage your property
+
+Choose action:`,
+[
+  [{ text: "📟 Submit Reading", callback_data: "reading" }],
+  [{ text: "💰 Record Payment", callback_data: "payment" }],
+  [{ text: "📊 Reports", callback_data: "reports" }]
+])
+}
+
+// TENANT LIST
+async function showTenants(chatId, session, profileId, step) {
+  const { data: tenants } = await supabase
+    .from('tenants')
+    .select('id, name, unit:units(unit_number)')
+    .eq('user_id', profileId)
+    .eq('status', 'Active')
+
+  if (!tenants?.length) {
+    return render(chatId, session, "❌ No tenants found", [[{ text: "⬅️ Back", callback_data: "menu" }]])
+  }
+
+  const keyboard = tenants.map(t => ([{
+    text: `${t.unit?.unit_number || '?'} - ${t.name}`,
+    callback_data: `${step}_${t.id}`
+  }]))
+
+  keyboard.push([{ text: "⬅️ Back", callback_data: "menu" }])
+
+  await render(chatId, session,
+`👤 *Select Tenant*
+
+Choose from list:`,
+keyboard)
+}
+
+// READING INPUT
+async function showReadingInput(chatId, session) {
+  await render(chatId, session,
+`📟 *Submit Reading*
+
+👤 Tenant selected
+
+Enter current reading:`,
+[
+  [{ text: "⬅️ Back", callback_data: "reading" }]
+])
+}
+
+// PAYMENT INPUT
+async function showPaymentInput(chatId, session) {
+  await render(chatId, session,
+`💰 *Record Payment*
+
+Enter amount:`,
+[
+  [{ text: "⬅️ Back", callback_data: "payment" }]
+])
+}
+
+// ---------------- MAIN HANDLER ----------------
 export async function POST(req) {
   try {
     const body = await req.json()
 
-    const message = body.message
-    const callback = body.callback_query
+    const msg = body.message
+    const cb = body.callback_query
 
-    const chatId = String(message?.chat?.id || callback?.message?.chat?.id)
+    const chatId = String(msg?.chat?.id || cb?.message?.chat?.id)
     if (!chatId) return NextResponse.json({ ok: true })
 
-    if (callback) {
-      await callTelegram('answerCallbackQuery', { callback_query_id: callback.id })
+    if (cb) {
+      await callTelegram('answerCallbackQuery', { callback_query_id: cb.id })
     }
 
-    const rawText = message?.text || callback?.data || ""
-    const input = rawText.toLowerCase()
+    const raw = msg?.text || cb?.data || ""
+    const input = raw.toLowerCase()
 
-    // --- AUTH ---
-    let { data: profile } = await supabase
+    const sessionKey = `tg_${chatId}`
+    const session = await db.get(sessionKey)
+
+    // AUTH (IMPORTANT)
+    const { data: profile } = await supabase
       .from('profiles')
       .select('*')
       .eq('telegram_chat_id', chatId)
       .maybeSingle()
 
     if (!profile) {
-      await ui.text(chatId, "❌ Unauthorized. Link your account first.")
+      await callTelegram('sendMessage', {
+        chat_id: chatId,
+        text: "❌ Unauthorized user"
+      })
       return NextResponse.json({ ok: true })
     }
 
-    const sessionKey = `tg_${chatId}`
-
-    // --- MENU ---
-    if (input.startsWith('/') || ['menu','hi','start','reset'].includes(input)) {
-      await db.clearSession(sessionKey)
-
-      return ui.list(chatId, "👋 PropManager Home", "Select an action:", [
-        { title: "⚡ RECORD", rows: [
-          { id: "path_reading", title: "Submit Reading" },
-          { id: "path_payment", title: "Record Payment" }
-        ]},
-        { title: "📊 REPORTS", rows: [
-          { id: "path_unpaid", title: "Unpaid Bills" },
-          { id: "path_monthly", title: "Monthly Summary" }
-        ]},
-        { title: "🔍 LOOKUP", rows: [
-          { id: "path_lookup", title: "Get Unit Bill" },
-          { id: "path_summary", title: "Property Status" }
-        ]}
-      ])
+    // ---------------- MENU ----------------
+    if (input.startsWith('/') || input === 'menu') {
+      await db.clear(sessionKey)
+      await showMenu(chatId, {})
+      return NextResponse.json({ ok: true })
     }
 
-    if (input === 'ignore') return NextResponse.json({ ok: true })
-
-    // --- ROUTES ---
-    if (input === 'path_reading') {
-      await db.updateSession(sessionKey, { step: 'READ_UNIT' })
-      return ui.text(chatId, "📝 Submit Reading\nWhich unit? (G01)")
+    // ---------------- NAVIGATION ----------------
+    if (input === 'reading') {
+      await db.set(sessionKey, { step: 'READ_TENANT' })
+      await showTenants(chatId, session, profile.id, "read")
+      return NextResponse.json({ ok: true })
     }
 
-    if (input === 'path_payment') {
-      const { data: tenants } = await supabase
-        .from('tenants')
-        .select('id, name, unit:units(unit_number)')
-        .eq('user_id', profile.id)
-
-      await db.updateSession(sessionKey, { step: 'PAY_TENANT' })
-
-      return ui.list(chatId, "💰 Record Payment", "Choose tenant:", [
-        { title: "TENANTS", rows: tenants.map(t => ({
-          id: `t_${t.id}`,
-          title: `${t.unit?.unit_number} - ${t.name}`
-        })) }
-      ])
+    if (input === 'payment') {
+      await db.set(sessionKey, { step: 'PAY_TENANT' })
+      await showTenants(chatId, session, profile.id, "pay")
+      return NextResponse.json({ ok: true })
     }
 
-    if (input === 'path_unpaid') {
-      const { data: bills } = await supabase
-        .from('utility_bills')
-        .select('*')
-        .gt('balance_due', 0)
-
-      return ui.text(chatId, `📊 Unpaid Bills: ${bills?.length || 0}`)
+    if (input === 'menu') {
+      await db.clear(sessionKey)
+      await showMenu(chatId, session)
+      return NextResponse.json({ ok: true })
     }
 
-    const session = await db.getSession(sessionKey)
+    // ---------------- TENANT SELECT ----------------
+    if (input.startsWith('read_')) {
+      const tenantId = input.replace('read_', '')
 
-    // --- FLOW ---
+      await db.set(sessionKey, {
+        step: 'READ_VALUE',
+        tenant_id: tenantId
+      })
+
+      await showReadingInput(chatId, session)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (input.startsWith('pay_')) {
+      const tenantId = input.replace('pay_', '')
+
+      await db.set(sessionKey, {
+        step: 'PAY_AMOUNT',
+        tenant_id: tenantId
+      })
+
+      await showPaymentInput(chatId, session)
+      return NextResponse.json({ ok: true })
+    }
+
+    // ---------------- FLOW ----------------
     if (session) {
-      if (session.step === 'READ_UNIT') {
-        await db.clearSession(sessionKey)
-        return ui.text(chatId, "✅ Reading saved")
-      }
 
-      if (session.step === 'PAY_TENANT') {
-        const tId = input.replace('t_', '')
-        await db.updateSession(sessionKey, { step: 'PAY_AMOUNT', tenant_id: tId })
-        return ui.text(chatId, "Enter amount")
+      if (session.step === 'READ_VALUE') {
+        const val = parseFloat(raw)
+
+        if (isNaN(val)) {
+          await callTelegram('sendMessage', {
+            chat_id: chatId,
+            text: "❌ Enter valid number"
+          })
+          return NextResponse.json({ ok: true })
+        }
+
+        await db.clear(sessionKey)
+
+        await callTelegram('sendMessage', {
+          chat_id: chatId,
+          text: `✅ Reading saved: ${val}`
+        })
+
+        await showMenu(chatId, {})
+        return NextResponse.json({ ok: true })
       }
 
       if (session.step === 'PAY_AMOUNT') {
-        const amt = parseFloat(rawText.replace(/[^\d.]/g, ''))
-        if (!amt) return ui.text(chatId, "Invalid amount")
+        const amt = parseFloat(raw)
 
-        await db.clearSession(sessionKey)
-        return ui.text(chatId, `✅ Payment ₹${db.fmt(amt)}`)
+        if (isNaN(amt)) {
+          await callTelegram('sendMessage', {
+            chat_id: chatId,
+            text: "❌ Enter valid amount"
+          })
+          return NextResponse.json({ ok: true })
+        }
+
+        await db.clear(sessionKey)
+
+        await callTelegram('sendMessage', {
+          chat_id: chatId,
+          text: `✅ Payment recorded ₹${amt}`
+        })
+
+        await showMenu(chatId, {})
+        return NextResponse.json({ ok: true })
       }
     }
 
-    return ui.text(chatId, "Send /start")
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: "Send /start"
+    })
+
+    return NextResponse.json({ ok: true })
 
   } catch (err) {
     console.error(err)
@@ -196,5 +276,5 @@ export async function POST(req) {
 }
 
 export async function GET() {
-  return new Response("Telegram Bot Running")
+  return new Response("Telegram Premium UI Running 🚀")
 }
