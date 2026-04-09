@@ -218,7 +218,7 @@ export async function POST(req) {
         const tId = listId?.replace('t_', ''); const { data: bills } = await supabase.from('utility_bills').select('*').eq('tenant_id', tId).order('billing_month', { ascending: false }).limit(3)
         if (!bills?.length) { await db.clearSession(from); return await ui.buttons(from, "📭 No history found.", ["Main Menu"]) }
         let r = `🧾 *History*\n\n`; bills.forEach(b => { r += `📅 *${b.billing_month}*\n💰 Total: ₹${db.fmt(b.total_amount)}\n🚩 Due: ₹${db.fmt(b.balance_due)}\n\n` })
-        await db.clearSession(from); return await ui.buttons(from, r, ["Main Menu"])
+        await db.clearSession(from); await ui.buttons(from, r, ["Main Menu"]); return ok()
       }
       if (session.step === 'REP_MONTH') {
         const m = listId?.replace('rep_', '')
